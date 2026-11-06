@@ -237,6 +237,20 @@ select.popup {
 .c-detail h3 { margin: 0; font-size: 15px; }
 .c-detail .tags { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* Variant E: split + countdown */
+.e-next { padding: 14px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); }
+.e-next .what { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.e-next .big { font-size: 15px; font-weight: 650; }
+.e-next .count { text-align: right; display: grid; line-height: 1; }
+.e-next .count b { font-size: 30px; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+.e-next .count small { color: var(--muted); font-size: 10.5px; margin-top: 4px; white-space: nowrap; }
+.e-nav { display: flex; align-items: center; gap: 4px; }
+.e-nav h2 { min-width: 150px; text-align: center; }
+.icon-btn:disabled { opacity: 0.3; cursor: default; background: none; }
+.cell.adj { opacity: 0.45; }
+.cell[data-pick] { cursor: pointer; }
+.cell[data-pick]:hover span { box-shadow: inset 0 0 0 1px var(--muted); border-radius: 50%; }
+
 /* Variant D: up next */
 .d-stream { flex: 1; padding: 14px 14px 20px; display: grid; gap: 10px; align-content: start; }
 .d-card { border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; display: grid; gap: 9px; }
@@ -395,7 +409,7 @@ function analyse(div) {
 }
 const DATA = Object.fromEntries(Object.keys(DIVISIONS).map((d) => [d, analyse(d)]));
 
-const state = { variant: "A", division: "england-and-wales", year: 2026, selected: null, hover: null };
+const state = { variant: "A", division: "england-and-wales", year: 2026, selected: null, hover: null, month: null, shown: null };
 const data = () => DATA[state.division];
 const nextHoliday = () => data().hs.find((h) => h.n >= TODAY);
 const inDays = (n) => { const k = n - TODAY; return k === 0 ? "today" : k === 1 ? "tomorrow" : `in ${k} days`; };
@@ -442,18 +456,20 @@ function variantA() {
 	};
 }
 
-function monthGrid(y, m, { cellAttrs = () => "", extra = () => "" } = {}) {
+function monthGrid(y, m, { cellAttrs = () => "", extra = () => "", overflow = false } = {}) {
 	const d = data();
 	const first = D(y, m, 1), days = D(y, m + 1, 1) - first;
 	const lead = (wd(first) + 6) % 7;
-	const cells = ["M", "T", "W", "T", "F", "S", "S"].map((x) => `<div class="dow">${x}</div>`);
-	for (let i = 0; i < lead; i++) cells.push(`<div class="cell out"></div>`);
-	for (let k = 0; k < days; k++) {
-		const n = first + k;
+	const cell = (n, adj) => {
 		const h = d.byN.get(n);
-		const cls = ["cell", d.isWeekend(n) && "we", n < TODAY && "past", n === TODAY && "today", d.fdwDays.has(n) && "fdw", d.bridgeDays.has(n) && "bw", h && "bh", h?.predicted && "pred", extra(n)].filter(Boolean).join(" ");
-		cells.push(`<div class="${cls}" data-n="${n}" ${cellAttrs(n, h)}><span>${k + 1}</span></div>`);
-	}
+		const cls = ["cell", adj && "adj", d.isWeekend(n) && "we", n < TODAY && "past", n === TODAY && "today", d.fdwDays.has(n) && "fdw", d.bridgeDays.has(n) && "bw", h && "bh", h?.predicted && "pred", extra(n)].filter(Boolean).join(" ");
+		return `<div class="${cls}" data-n="${n}" ${cellAttrs(n, h)}><span>${ymd(n)[2]}</span></div>`;
+	};
+	const cells = ["M", "T", "W", "T", "F", "S", "S"].map((x) => `<div class="dow">${x}</div>`);
+	for (let i = lead; i > 0; i--) cells.push(overflow ? cell(first - i, true) : `<div class="cell out"></div>`);
+	for (let k = 0; k < days; k++) cells.push(cell(first + k, false));
+	const trail = overflow ? (7 - ((lead + days) % 7)) % 7 : 0;
+	for (let i = 0; i < trail; i++) cells.push(cell(first + days + i, true));
 	return `<div class="mgrid">${cells.join("")}</div>`;
 }
 
@@ -546,6 +562,55 @@ function variantD() {
 	};
 }
 
+function detailE(n) {
+	const d = data();
+	const h = d.byN.get(n);
+	const when = n < TODAY ? `${TODAY - n} days ago` : inDays(n);
+	if (h) {
+		const st = h.stretch;
+		const tags = [];
+		if (st.fdw) tags.push(`<span class="tag fdw">Four-day weekend · ${range(st.s, st.e)}</span>`);
+		if (h.sub) tags.push(`<span class="tag sub">Substitute day</span>`);
+		if (h.predicted) tags.push(predTag);
+		const bridges = [st.bridgeIn, st.bridgeOut].filter(Boolean).map((br) => `<div><span class="tag bridge">Bridge${br.predicted ? " · predicted" : ""}</span> ${bridgeText(br)}</div>`).join("");
+		return `<h3>${esc(h.name)}</h3><span class="muted">${fmtLong(n)} · ${when}</span>${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}${bridges}`;
+	}
+	const br = d.bridges.find((b) => b.work.includes(n));
+	if (br) return `<h3>Bridge${br.predicted ? " · predicted" : ""}</h3><span class="muted">${fmtLong(n)} · ${when}</span><div>${bridgeText(br)}, joining ${esc(br.a.bh.at(-1).name)} to ${esc(br.b.bh[0].name)}.</div>`;
+	const st = d.stretches.find((s) => s.fdw && n >= s.s && n <= s.e);
+	if (st) return `<h3>Four-day weekend</h3><span class="muted">${fmtLong(n)} · ${when}</span><div>${range(st.s, st.e)}, around ${st.bh.map((x) => esc(x.name)).join(" and ")}.</div>`;
+	const after = d.hs.find((x) => x.n > n);
+	return `<h3>${fmtLong(n)}</h3><span class="muted">${d.isWeekend(n) ? "Weekend" : "Working day"} · ${when}</span><div class="muted">Next bank holiday after this: ${esc(after.name)}, ${fmt(after.n)}.</div>`;
+}
+
+function variantE() {
+	const nx = nextHoliday();
+	const hs = yearHolidays();
+	const focus = state.selected ?? (hs.find((h) => h.n >= TODAY) ?? hs[0]).n;
+	const [fy, fm] = ymd(focus);
+	const [y, m] = state.month != null ? ymd(state.month) : [fy, fm];
+	state.shown = D(y, m, 1);
+	const rows = hs.map((h) => {
+		const st = h.stretch;
+		const dot = h.predicted ? "pred" : st.fdw ? "fdw" : st.bridgeOut || st.bridgeIn ? "bridge" : "";
+		return `<button class="row ${h.n < TODAY ? "past" : ""}" data-sel="${h.n}" aria-selected="${h.n === focus}"><span class="muted num">${fmt(h.n).replace(/^\w+ /, "")}</span><span>${esc(h.name)}</span><span class="dot ${dot}"></span></button>`;
+	}).join("");
+	const canPrev = YEARS.includes(ymd(state.shown - 1)[0]);
+	const canNext = YEARS.includes(ymd(D(y, m + 1, 1))[0]);
+	return {
+		w: 880, h: 600,
+		html: `<div class="titlebar">${lights}<div class="spacer"></div>${segDivisions()}</div>
+		<div class="win-body">
+			<aside class="c-side"><div class="e-next"><div class="what"><span class="eyebrow">Next bank holiday</span><span class="big">${esc(nx.name)}</span><span class="muted">${fmtLong(nx.n)}${nx.stretch.fdw ? " · four-day weekend" : ""}</span></div>
+			<div class="count"><b>${nx.n - TODAY}</b><small>days to go</small></div></div>
+			<div class="c-yr">${stepper()}</div><div class="c-list scroll">${rows}</div></aside>
+			<main class="c-main"><div class="c-head"><div class="e-nav"><button class="icon-btn" data-month="-1" aria-label="Previous month" ${canPrev ? "" : "disabled"}>‹</button><h2>${MONTHS[m - 1]} ${y}</h2><button class="icon-btn" data-month="1" aria-label="Next month" ${canNext ? "" : "disabled"}>›</button></div>${legend()}</div>
+			${monthGrid(y, m, { overflow: true, extra: (n) => (n === focus ? "sel" : ""), cellAttrs: (n) => `data-pick="${n}" role="button" tabindex="0"` })}
+			<div class="c-detail">${detailE(focus)}</div></main>
+		</div>`,
+	};
+}
+
 const VARIANTS = [
 	{ key: "A", name: "Agenda", render: variantA, notes: `
 		<p>A narrow list of the year's bank holidays, grouped by month. A big countdown to the next one sits on top. A bracket ties together the bank holidays of a four-day weekend, and a bridge gets its own dashed row between the two holidays it joins.</p>
@@ -559,6 +624,9 @@ const VARIANTS = [
 	{ key: "D", name: "Up next", render: variantD, notes: `
 		<p>No year view at all. A rolling stream of upcoming stretches of days off, each a card showing its days, with bridges as connectors between cards. Easter is one card, not two rows. Predicted cards sit below a dashed divider. The division is a pop-up menu.</p>
 		<ul><li>Answers "when's my next time off?" before anything else.</li><li>Organises by stretch of days off rather than by bank holiday, which changes what the core library returns.</li><li>Looking back, or at a specific year, isn't possible.</li></ul>` },
+	{ key: "E", name: "Split + countdown", render: variantE, notes: `
+		<p>C's layout with A's countdown at the top of the sidebar. The month grid fills its first and last weeks with dimmed days from the neighbouring months, marks included, so a Christmas-to-New-Year bridge shows in December's grid. Click any day for details. Clicking a dimmed day moves to its month.</p>
+		<ul><li>The month follows the selected holiday, and ‹ › browse months on their own.</li><li>The year stepper and month browsing stay in sync: moving into January changes the year.</li><li>The detail panel describes any day: bank holiday, bridge day, four-day weekend or ordinary day.</li></ul>` },
 ];
 
 function render() {
@@ -585,8 +653,17 @@ function cycle(step) {
 }
 
 document.addEventListener("click", (e) => {
-	const t = e.target.closest("button");
-	if (!t) return;
+	const t = e.target.closest("button, [data-pick]");
+	if (!t || t.disabled) return;
+	if (t.dataset.pick || t.dataset.month) {
+		const n = t.dataset.pick ? Number(t.dataset.pick) : D(ymd(state.shown)[0], ymd(state.shown)[1] + Number(t.dataset.month), 1);
+		const [py, pm] = ymd(n);
+		if (!YEARS.includes(py)) return;
+		if (t.dataset.pick) state.selected = n;
+		state.month = D(py, pm, 1);
+		state.year = py;
+		return render();
+	}
 	if (t.id === "prev") return cycle(-1);
 	if (t.id === "next") return cycle(1);
 	if (t.id === "theme") {
@@ -601,9 +678,10 @@ document.addEventListener("click", (e) => {
 		if (!YEARS.includes(y)) return;
 		state.year = y;
 		state.selected = null;
+		state.month = null;
 		return render();
 	}
-	if (t.dataset.sel) { state.selected = Number(t.dataset.sel); return render(); }
+	if (t.dataset.sel) { state.selected = Number(t.dataset.sel); state.month = null; return render(); }
 });
 document.addEventListener("change", (e) => {
 	if (e.target.id !== "d-div") return;
