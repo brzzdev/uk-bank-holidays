@@ -232,7 +232,8 @@ select.popup {
 .c-head h2 { margin: 0; font-size: 17px; }
 .c-main .mgrid { gap: 3px; }
 .c-main .cell { aspect-ratio: auto; height: 38px; font-size: 13px; border-radius: 5px; }
-.c-main .cell.sel span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.c-main .cell span { width: 30px; height: 30px; aspect-ratio: auto; }
+.c-main .cell.sel span { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 50%; }
 .c-detail { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 6px; line-height: 1.45; }
 .c-detail h3 { margin: 0; font-size: 15px; }
 .c-detail .tags { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -489,7 +490,7 @@ function describeDay(n) {
 }
 
 function legend() {
-	return `<div class="legend"><span><i class="lg-bh"></i>Bank holiday</span><span><i class="lg-pred"></i>Predicted</span><span><i class="lg-fdw"></i>Four-day weekend</span><span><i class="lg-bw"></i>Bridge (book these)</span></div>`;
+	return `<div class="legend"><span><i class="lg-bh"></i>Bank holiday</span><span><i class="lg-pred"></i>Predicted</span><span><i class="lg-fdw"></i>Four-day weekend</span><span><i class="lg-bw"></i>Bridge</span></div>`;
 }
 
 function variantB() {
