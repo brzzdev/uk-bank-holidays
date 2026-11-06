@@ -1,0 +1,632 @@
+<title>Bank Holidays Window Layouts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a stage holding one mock macOS window per variant, notes beneath, switcher pill pinned to the bottom. */
+:root {
+	--stage: #e6e8ec;
+	--win: #ffffff;
+	--bar: #f3f4f6;
+	--line: #dcdfe4;
+	--ink: #1b1e23;
+	--muted: #6a717d;
+	--red: #c4302a;
+	--red-tint: #fbe8e6;
+	--amber: #a8680f;
+	--amber-tint: #fcf1da;
+	--pill: #1b1e23;
+	--pill-ink: #f3f4f6;
+	--font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		color-scheme: dark;
+		--stage: #131518;
+		--win: #1c1f23;
+		--bar: #23262b;
+		--line: #353940;
+		--ink: #e6e8eb;
+		--muted: #949ba6;
+		--red: #ff6f62;
+		--red-tint: #3b2321;
+		--amber: #e9b24f;
+		--amber-tint: #382e1b;
+		--pill: #f3f4f6;
+		--pill-ink: #1b1e23;
+	}
+}
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--stage: #131518;
+	--win: #1c1f23;
+	--bar: #23262b;
+	--line: #353940;
+	--ink: #e6e8eb;
+	--muted: #949ba6;
+	--red: #ff6f62;
+	--red-tint: #3b2321;
+	--amber: #e9b24f;
+	--amber-tint: #382e1b;
+	--pill: #f3f4f6;
+	--pill-ink: #1b1e23;
+}
+
+body {
+	background: var(--stage);
+	color: var(--ink);
+	font-family: var(--font-ui);
+	padding-block: 28px 110px;
+	padding-left: max(16px, env(safe-area-inset-left, 0px));
+	padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { display: grid; gap: 20px; justify-items: center; }
+.intro { max-width: 62ch; display: grid; gap: 6px; text-align: left; width: 100%; }
+.intro h1 { font-size: 15px; margin: 0; letter-spacing: 0.01em; }
+.intro p { margin: 0; color: var(--muted); line-height: 1.5; }
+.eyebrow { font: 600 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.stage-scroll { max-width: 100%; overflow-x: auto; padding: 4px 4px 18px; }
+.notes { max-width: 62ch; width: 100%; display: grid; gap: 8px; line-height: 1.55; }
+.notes h2 { font-size: 14px; margin: 0; }
+.notes p, .notes ul { margin: 0; }
+.notes ul { padding-left: 18px; color: var(--muted); }
+
+/* Window */
+.win {
+	background: var(--win);
+	border: 1px solid var(--line);
+	border-radius: 11px;
+	box-shadow: 0 22px 50px rgb(0 0 0 / 0.16), 0 2px 6px rgb(0 0 0 / 0.08);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	font-size: 13px;
+}
+.titlebar {
+	height: 40px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px 0 10px;
+	background: var(--bar);
+	border-bottom: 1px solid var(--line);
+}
+.lights { display: flex; gap: 8px; flex: none; margin-right: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.lights i:nth-child(1) { background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; }
+.lights i:nth-child(3) { background: #28c840; }
+.spacer { flex: 1; }
+.win-body { flex: 1; min-height: 0; display: flex; }
+.scroll { overflow-y: auto; min-height: 0; }
+
+/* Kit-like controls */
+.seg { display: inline-flex; background: var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button {
+	font: 500 12px var(--font-ui);
+	color: var(--ink);
+	background: none;
+	border: 0;
+	border-radius: 5px;
+	padding: 4px 9px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.seg button[aria-pressed="true"] { background: var(--win); box-shadow: 0 1px 2px rgb(0 0 0 / 0.15); }
+.stepper { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stepper button, .icon-btn {
+	border: 0;
+	background: none;
+	color: var(--muted);
+	font: 600 15px var(--font-ui);
+	width: 24px;
+	height: 24px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.stepper button:hover, .icon-btn:hover { background: var(--line); color: var(--ink); }
+.stepper button:disabled { opacity: 0.3; cursor: default; background: none; }
+.stepper span { min-width: 40px; text-align: center; }
+button:focus-visible, select:focus-visible, .cell:focus-visible, .row:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
+select.popup {
+	font: 500 12px var(--font-ui);
+	color: var(--ink);
+	background: var(--win);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 3px 6px;
+}
+.tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font: 600 10.5px var(--font-ui);
+	letter-spacing: 0.02em;
+	padding: 2px 6px;
+	border-radius: 4px;
+	white-space: nowrap;
+}
+.tag.fdw { background: var(--red-tint); color: var(--red); }
+.tag.bridge { background: var(--amber-tint); color: var(--amber); }
+.tag.pred { border: 1px dashed var(--muted); color: var(--muted); font-style: italic; }
+.tag.sub { color: var(--muted); padding: 0; font-weight: 500; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Variant A: agenda */
+.a-next { padding: 16px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
+.a-next .what { flex: 1; display: grid; gap: 3px; }
+.a-next .name { font-size: 18px; font-weight: 650; }
+.a-next .count { text-align: right; display: grid; line-height: 1; }
+.a-next .count b { font-size: 34px; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+.a-next .count small { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.a-year { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 8px 18px; border-bottom: 1px solid var(--line); }
+.a-list { padding: 4px 0 16px; }
+.a-month { padding: 12px 18px 4px; }
+.a-row { display: grid; grid-template-columns: 44px 1fr; gap: 12px; padding: 7px 18px; align-items: start; position: relative; }
+.a-row.past { opacity: 0.45; }
+.a-row.pred .a-date { border-style: dashed; }
+.a-row.grouped::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 3px; background: var(--red-tint); }
+.a-row.grouped.first::before { top: 10px; }
+.a-row.grouped.last::before { bottom: 10px; }
+.a-date { border: 1px solid var(--line); border-radius: 7px; text-align: center; padding: 3px 0; line-height: 1.1; }
+.a-date b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+.a-date small { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.a-row.bh .a-date b { color: var(--red); }
+.a-what { display: grid; gap: 4px; padding-top: 2px; }
+.a-what .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.a-bridge { margin: 4px 18px 4px 74px; padding: 8px 10px; border: 1px dashed var(--amber); border-radius: 7px; background: var(--amber-tint); color: var(--ink); display: grid; gap: 2px; font-size: 12px; }
+.a-bridge b { color: var(--amber); }
+
+/* Variant B and C: month grids */
+.mgrid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.mgrid .dow { font-size: 9.5px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: 0.04em; }
+.cell {
+	position: relative;
+	aspect-ratio: 1;
+	display: grid;
+	place-items: center;
+	font-variant-numeric: tabular-nums;
+	color: var(--ink);
+}
+.cell.out { visibility: hidden; }
+.cell.we { color: var(--muted); }
+.cell.past { opacity: 0.4; }
+.cell.fdw { background: var(--red-tint); }
+.cell.bw { background: repeating-linear-gradient(135deg, var(--amber-tint) 0 3px, transparent 3px 6px); color: var(--amber); font-weight: 600; }
+.cell.bh span { background: var(--red); color: var(--win); font-weight: 700; border-radius: 50%; }
+.cell.bh.pred span { background: none; color: var(--red); border: 1.5px dashed var(--red); }
+.cell span { width: 78%; aspect-ratio: 1; display: grid; place-items: center; box-sizing: border-box; }
+.cell.today span { box-shadow: inset 0 0 0 1.5px var(--ink); border-radius: 50%; }
+.b-wall { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 26px; padding: 18px 22px; align-content: start; }
+.b-month h3 { margin: 0 0 6px; font-size: 12px; font-weight: 650; }
+.b-month .cell { font-size: 10.5px; cursor: default; }
+.b-foot { flex: none; border-top: 1px solid var(--line); display: flex; gap: 16px; align-items: center; padding: 9px 16px; background: var(--bar); font-size: 12px; min-height: 20px; }
+.legend { display: flex; gap: 12px; color: var(--muted); font-size: 11px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.lg-bh { background: var(--red); border-radius: 50% !important; }
+.lg-pred { border: 1.5px dashed var(--red); border-radius: 50% !important; box-sizing: border-box; }
+.lg-fdw { background: var(--red-tint); }
+.lg-bw { background: repeating-linear-gradient(135deg, var(--amber) 0 2px, transparent 2px 4px); }
+.chip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; background: var(--win); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; white-space: nowrap; }
+.chip b { color: var(--red); }
+
+/* Variant C: split */
+.c-side { width: 270px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: var(--bar); }
+.c-next { padding: 14px 14px 10px; display: grid; gap: 2px; border-bottom: 1px solid var(--line); }
+.c-next .big { font-size: 15px; font-weight: 650; }
+.c-next .big b { color: var(--red); }
+.c-yr { display: flex; justify-content: center; padding: 6px; border-bottom: 1px solid var(--line); }
+.c-list { flex: 1; padding: 6px; display: grid; gap: 1px; align-content: start; }
+.row { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; }
+.row:hover { background: var(--line); }
+.row[aria-selected="true"] { background: var(--red); color: var(--win); }
+.row[aria-selected="true"] .muted { color: var(--win); opacity: 0.85; }
+.row.past { opacity: 0.5; }
+.row .dot { width: 7px; height: 7px; border-radius: 50%; }
+.row .dot.fdw { background: var(--red); }
+.row .dot.bridge { background: var(--amber); }
+.row .dot.pred { border: 1px dashed currentColor; }
+.c-main { flex: 1; display: flex; flex-direction: column; padding: 16px 22px 18px; gap: 14px; min-width: 0; }
+.c-head { display: flex; align-items: center; justify-content: space-between; }
+.c-head h2 { margin: 0; font-size: 17px; }
+.c-main .mgrid { gap: 3px; }
+.c-main .cell { aspect-ratio: auto; height: 38px; font-size: 13px; border-radius: 5px; }
+.c-main .cell.sel span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.c-detail { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 6px; line-height: 1.45; }
+.c-detail h3 { margin: 0; font-size: 15px; }
+.c-detail .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Variant D: up next */
+.d-stream { flex: 1; padding: 14px 14px 20px; display: grid; gap: 10px; align-content: start; }
+.d-card { border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; display: grid; gap: 9px; }
+.d-card.pred { border-style: dashed; }
+.d-card.first { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.d-top { display: flex; align-items: baseline; gap: 8px; }
+.d-top .n { flex: 1; font-weight: 650; font-size: 14px; }
+.d-top .when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.d-card.first .when { color: var(--red); font-weight: 650; }
+.d-days { display: flex; gap: 4px; flex-wrap: wrap; }
+.d-day { width: 34px; border-radius: 6px; text-align: center; padding: 3px 0; line-height: 1.15; background: var(--bar); }
+.d-day small { display: block; font-size: 9.5px; color: var(--muted); text-transform: uppercase; }
+.d-day b { font-size: 13px; font-variant-numeric: tabular-nums; }
+.d-day.bh { background: var(--red); color: var(--win); }
+.d-day.bh small { color: var(--win); opacity: 0.85; }
+.d-card.pred .d-day.bh { background: none; color: var(--red); border: 1.5px dashed var(--red); padding: 1.5px 0; }
+.d-card.pred .d-day.bh small { color: var(--red); }
+.d-sub { font-size: 12px; color: var(--muted); }
+.d-bridge { margin: -2px 22px; padding: 7px 10px; border-left: 2px dashed var(--amber); font-size: 12px; display: grid; gap: 1px; }
+.d-bridge b { color: var(--amber); }
+.d-divider { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 6px; }
+.d-divider::before, .d-divider::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+.d-year { font: 600 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); margin-top: 6px; }
+
+/* Prototype switcher */
+.switcher {
+	position: fixed;
+	left: 50%;
+	transform: translateX(-50%);
+	bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	background: var(--pill);
+	color: var(--pill-ink);
+	border-radius: 99px;
+	padding: 5px;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+	font: 600 12px var(--font-mono);
+	z-index: 20;
+	max-width: calc(100% - 32px);
+}
+.switcher button { background: none; border: 0; color: inherit; font: inherit; font-size: 15px; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+.switcher button:hover { background: rgb(127 127 127 / 0.3); }
+.switcher span { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.switcher .theme { font-size: 12px; width: auto; padding: 0 10px; border-radius: 99px; }
+</style>
+
+<div class="page">
+	<header class="intro">
+		<span class="eyebrow">Prototype · App UI layout</span>
+		<h1>What should the bank holidays window look like?</h1>
+		<p>Four layouts of the same macOS window, all fed from the same rule-generated dates. 2019 to 2028 count as published, later years are predicted, and today is fixed at Fri 6 Nov 2026. Flip between them with the pill or the ← → keys.</p>
+	</header>
+	<div class="stage-scroll"><div id="win"></div></div>
+	<section class="notes" id="notes"></section>
+</div>
+<nav class="switcher" aria-label="Prototype variants">
+	<button id="prev" aria-label="Previous variant">←</button>
+	<span id="label"></span>
+	<button id="next" aria-label="Next variant">→</button>
+	<button id="theme" class="theme" aria-label="Toggle theme">◐</button>
+</nav>
+
+<script>
+const DAY = 864e5;
+const D = (y, m, d) => Date.UTC(y, m - 1, d) / DAY;
+const wd = (n) => (n + 4) % 7;
+const ymd = (n) => { const t = new Date(n * DAY); return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()]; };
+const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEK_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MON = MONTHS.map((m) => m.slice(0, 3));
+const fmt = (n) => { const [, m, d] = ymd(n); return `${WEEK[wd(n)]} ${d} ${MON[m - 1]}`; };
+const fmtLong = (n) => { const [y, m, d] = ymd(n); return `${WEEK_LONG[wd(n)]} ${d} ${MONTHS[m - 1]} ${y}`; };
+const range = (a, b) => { const [, am, ad] = ymd(a); const [, bm, bd] = ymd(b); return am === bm ? `${ad}–${bd} ${MON[bm - 1]}` : `${ad} ${MON[am - 1]} – ${bd} ${MON[bm - 1]}`; };
+
+const TODAY = D(2026, 11, 6);
+const LAST_PUBLISHED_YEAR = 2028;
+const YEARS = [2025, 2026, 2027, 2028, 2029, 2030];
+const DIVISIONS = { "england-and-wales": "England and Wales", scotland: "Scotland", "northern-ireland": "Northern Ireland" };
+
+function easter(y) {
+	const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+	const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+	const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+	const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+	const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+	return D(y, month, day);
+}
+const firstMon = (y, m) => { let n = D(y, m, 1); while (wd(n) !== 1) n++; return n; };
+const lastMon = (y, m) => { let n = D(y, m + 1, 1) - 1; while (wd(n) !== 1) n--; return n; };
+function single(out, n, name) {
+	const w = wd(n);
+	if (w === 6) return out.push({ n: n + 2, name, sub: true });
+	if (w === 0) return out.push({ n: n + 1, name, sub: true });
+	out.push({ n, name, sub: false });
+}
+function pair(out, n, a, b) {
+	const w = wd(n);
+	if (w === 5) return out.push({ n, name: a, sub: false }, { n: n + 3, name: b, sub: true });
+	if (w === 6) return out.push({ n: n + 2, name: a, sub: true }, { n: n + 3, name: b, sub: true });
+	if (w === 0) return out.push({ n: n + 1, name: b, sub: false }, { n: n + 2, name: a, sub: true });
+	out.push({ n, name: a, sub: false }, { n: n + 1, name: b, sub: false });
+}
+function holidaysFor(div, y) {
+	const out = [];
+	const e = easter(y);
+	if (div === "scotland") pair(out, D(y, 1, 1), "New Year’s Day", "2nd January");
+	else single(out, D(y, 1, 1), "New Year’s Day");
+	if (div === "northern-ireland") single(out, D(y, 3, 17), "St Patrick’s Day");
+	out.push({ n: e - 2, name: "Good Friday", sub: false });
+	if (div !== "scotland") out.push({ n: e + 1, name: "Easter Monday", sub: false });
+	out.push({ n: firstMon(y, 5), name: "Early May bank holiday", sub: false });
+	out.push({ n: lastMon(y, 5), name: "Spring bank holiday", sub: false });
+	if (div === "northern-ireland") single(out, D(y, 7, 12), "Battle of the Boyne (Orangemen’s Day)");
+	out.push({ n: div === "scotland" ? firstMon(y, 8) : lastMon(y, 8), name: "Summer bank holiday", sub: false });
+	if (div === "scotland") single(out, D(y, 11, 30), "St Andrew’s Day");
+	pair(out, D(y, 12, 25), "Christmas Day", "Boxing Day");
+	return out.map((h) => ({ ...h, year: y, predicted: y > LAST_PUBLISHED_YEAR }));
+}
+
+function analyse(div) {
+	const hs = [];
+	for (let y = 2024; y <= 2031; y++) hs.push(...holidaysFor(div, y));
+	hs.sort((a, b) => a.n - b.n);
+	const byN = new Map(hs.map((h) => [h.n, h]));
+	const isWeekend = (n) => wd(n) === 0 || wd(n) === 6;
+	const off = (n) => isWeekend(n) || byN.has(n);
+	const start = D(2024, 1, 1), end = D(2031, 12, 31);
+	const stretches = [];
+	for (let n = start; n <= end; ) {
+		if (!off(n)) { n++; continue; }
+		const s = n;
+		while (n <= end && off(n)) n++;
+		const bh = hs.filter((h) => h.n >= s && h.n < n);
+		if (bh.length) stretches.push({ s, e: n - 1, bh, predicted: bh.some((h) => h.predicted) });
+	}
+	for (const st of stretches) st.fdw = st.e - st.s + 1 >= 4 && st.bh.length >= 2;
+	const bridges = [];
+	for (let i = 0; i + 1 < stretches.length; i++) {
+		const a = stretches[i], b = stretches[i + 1];
+		const work = [];
+		for (let k = a.e + 1; k < b.s; k++) if (!off(k)) work.push(k);
+		if (work.length > 8) continue;
+		const br = { a, b, work, s: a.s, e: b.e, predicted: a.predicted || b.predicted };
+		a.bridgeOut = br;
+		b.bridgeIn = br;
+		bridges.push(br);
+	}
+	for (const h of hs) h.stretch = stretches.find((st) => h.n >= st.s && h.n <= st.e);
+	const fdwDays = new Set(), bridgeDays = new Set();
+	for (const st of stretches) if (st.fdw) for (let k = st.s; k <= st.e; k++) fdwDays.add(k);
+	for (const br of bridges) for (const k of br.work) bridgeDays.add(k);
+	return { hs, byN, stretches, bridges, fdwDays, bridgeDays, isWeekend };
+}
+const DATA = Object.fromEntries(Object.keys(DIVISIONS).map((d) => [d, analyse(d)]));
+
+const state = { variant: "A", division: "england-and-wales", year: 2026, selected: null, hover: null };
+const data = () => DATA[state.division];
+const nextHoliday = () => data().hs.find((h) => h.n >= TODAY);
+const inDays = (n) => { const k = n - TODAY; return k === 0 ? "today" : k === 1 ? "tomorrow" : `in ${k} days`; };
+const yearHolidays = () => data().hs.filter((h) => h.year === state.year);
+const bridgeText = (br) => `Book ${br.work.length} day${br.work.length === 1 ? "" : "s"} (${range(br.work[0], br.work.at(-1))}), get ${br.e - br.s + 1} off (${range(br.s, br.e)})`;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+const lights = `<div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>`;
+const segDivisions = (labels = DIVISIONS) => `<div class="seg" role="group" aria-label="Division">${Object.keys(DIVISIONS).map((k) => `<button data-div="${k}" aria-pressed="${state.division === k}">${labels[k]}</button>`).join("")}</div>`;
+const stepper = () => `<div class="stepper"><button data-year="-1" aria-label="Previous year" ${state.year === YEARS[0] ? "disabled" : ""}>‹</button><span>${state.year}</span><button data-year="1" aria-label="Next year" ${state.year === YEARS.at(-1) ? "disabled" : ""}>›</button></div>`;
+const predTag = `<span class="tag pred">Predicted</span>`;
+
+function variantA() {
+	const nx = nextHoliday();
+	const rows = [];
+	let month = -1;
+	for (const h of yearHolidays()) {
+		const [, m, d] = ymd(h.n);
+		if (m !== month) { month = m; rows.push(`<div class="a-month eyebrow">${MONTHS[m - 1]}</div>`); }
+		const st = h.stretch;
+		const grouped = st.fdw;
+		const first = grouped && st.bh[0] === h, last = grouped && st.bh.at(-1) === h;
+		const tags = [];
+		if (first) tags.push(`<span class="tag fdw">Four-day weekend · ${range(st.s, st.e)}</span>`);
+		if (h.sub) tags.push(`<span class="tag sub">Substitute day</span>`);
+		if (h.predicted) tags.push(predTag);
+		rows.push(`<div class="a-row bh ${h.n < TODAY ? "past" : ""} ${h.predicted ? "pred" : ""} ${grouped ? "grouped" : ""} ${first ? "first" : ""} ${last ? "last" : ""}">
+			<div class="a-date"><b>${d}</b><small>${WEEK[wd(h.n)]}</small></div>
+			<div class="a-what"><div>${esc(h.name)}</div>${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}</div></div>`);
+		if (st.bridgeOut && st.bh.at(-1) === h) {
+			const br = st.bridgeOut;
+			rows.push(`<div class="a-bridge"><b>Bridge to ${esc(br.b.bh[0].name)}${br.predicted ? " · predicted" : ""}</b><span>${bridgeText(br)}</span></div>`);
+		}
+	}
+	return {
+		w: 420, h: 680,
+		html: `<div class="titlebar">${lights}<div class="spacer"></div>${segDivisions({ "england-and-wales": "England & Wales", scotland: "Scotland", "northern-ireland": "N. Ireland" })}</div>
+		<div class="win-body" style="flex-direction:column">
+			<div class="a-next"><div class="what"><span class="eyebrow">Next bank holiday</span><span class="name">${esc(nx.name)}</span><span class="muted">${fmtLong(nx.n)}${nx.stretch.fdw ? " · four-day weekend" : ""}</span></div>
+			<div class="count"><b>${nx.n - TODAY}</b><small>days to go</small></div></div>
+			<div class="a-year">${stepper()}<span class="muted num">${yearHolidays().length} bank holidays${state.year > LAST_PUBLISHED_YEAR ? " · all predicted" : ""}</span></div>
+			<div class="a-list scroll">${rows.join("")}</div>
+		</div>`,
+	};
+}
+
+function monthGrid(y, m, { cellAttrs = () => "", extra = () => "" } = {}) {
+	const d = data();
+	const first = D(y, m, 1), days = D(y, m + 1, 1) - first;
+	const lead = (wd(first) + 6) % 7;
+	const cells = ["M", "T", "W", "T", "F", "S", "S"].map((x) => `<div class="dow">${x}</div>`);
+	for (let i = 0; i < lead; i++) cells.push(`<div class="cell out"></div>`);
+	for (let k = 0; k < days; k++) {
+		const n = first + k;
+		const h = d.byN.get(n);
+		const cls = ["cell", d.isWeekend(n) && "we", n < TODAY && "past", n === TODAY && "today", d.fdwDays.has(n) && "fdw", d.bridgeDays.has(n) && "bw", h && "bh", h?.predicted && "pred", extra(n)].filter(Boolean).join(" ");
+		cells.push(`<div class="${cls}" data-n="${n}" ${cellAttrs(n, h)}><span>${k + 1}</span></div>`);
+	}
+	return `<div class="mgrid">${cells.join("")}</div>`;
+}
+
+function describeDay(n) {
+	const d = data();
+	const h = d.byN.get(n);
+	if (h) {
+		const bits = [`<b>${esc(h.name)}</b>`, fmtLong(n)];
+		if (h.sub) bits.push("substitute day");
+		if (h.stretch.fdw) bits.push(`four-day weekend ${range(h.stretch.s, h.stretch.e)}`);
+		if (h.predicted) bits.push("predicted");
+		return bits.join(" · ");
+	}
+	const br = d.bridges.find((b) => b.work.includes(n));
+	if (br) return `<b>Bridge</b> · ${bridgeText(br)}${br.predicted ? " · predicted" : ""}`;
+	return fmtLong(n);
+}
+
+function legend() {
+	return `<div class="legend"><span><i class="lg-bh"></i>Bank holiday</span><span><i class="lg-pred"></i>Predicted</span><span><i class="lg-fdw"></i>Four-day weekend</span><span><i class="lg-bw"></i>Bridge (book these)</span></div>`;
+}
+
+function variantB() {
+	const nx = nextHoliday();
+	const months = MONTHS.map((name, i) => `<div class="b-month"><h3>${name}</h3>${monthGrid(state.year, i + 1, { cellAttrs: (n) => `tabindex="-1"` })}</div>`).join("");
+	return {
+		w: 980, h: 700,
+		html: `<div class="titlebar">${lights}${stepper()}<div class="spacer"></div><span class="chip">Next: ${esc(nx.name)} <b>${inDays(nx.n)}</b></span><div class="spacer"></div>${segDivisions()}</div>
+		<div class="win-body" style="flex-direction:column"><div class="b-wall scroll">${months}</div>
+		<div class="b-foot"><span id="b-status" style="flex:1">${state.hover != null ? describeDay(state.hover) : `<span class="muted">Hover a day for details</span>`}</span>${legend()}</div></div>`,
+	};
+}
+
+function variantC() {
+	const nx = nextHoliday();
+	const hs = yearHolidays();
+	let sel = hs.find((h) => h.n === state.selected) ?? hs.find((h) => h.n >= TODAY) ?? hs[0];
+	const [y, m] = ymd(sel.n);
+	const rows = hs.map((h) => {
+		const st = h.stretch;
+		const dot = h.predicted ? "pred" : st.fdw ? "fdw" : st.bridgeOut || st.bridgeIn ? "bridge" : "";
+		return `<button class="row ${h.n < TODAY ? "past" : ""}" data-sel="${h.n}" aria-selected="${h === sel}"><span class="muted num">${fmt(h.n).replace(/^\w+ /, "")}</span><span>${esc(h.name)}</span><span class="dot ${dot}"></span></button>`;
+	}).join("");
+	const st = sel.stretch;
+	const tags = [];
+	if (st.fdw) tags.push(`<span class="tag fdw">Four-day weekend · ${range(st.s, st.e)}</span>`);
+	if (sel.sub) tags.push(`<span class="tag sub">Substitute day</span>`);
+	if (sel.predicted) tags.push(predTag);
+	const bridges = [st.bridgeIn, st.bridgeOut].filter(Boolean).map((br) => `<div><span class="tag bridge">Bridge${br.predicted ? " · predicted" : ""}</span> ${bridgeText(br)}</div>`).join("");
+	return {
+		w: 860, h: 580,
+		html: `<div class="titlebar">${lights}<div class="spacer"></div>${segDivisions()}</div>
+		<div class="win-body">
+			<aside class="c-side"><div class="c-next"><span class="eyebrow">Next bank holiday</span><span class="big">${esc(nx.name)} <b>${inDays(nx.n)}</b></span><span class="muted">${fmtLong(nx.n)}</span></div>
+			<div class="c-yr">${stepper()}</div><div class="c-list scroll">${rows}</div></aside>
+			<main class="c-main"><div class="c-head"><h2>${MONTHS[m - 1]} ${y}</h2>${legend()}</div>
+			${monthGrid(y, m, { extra: (n) => (n === sel.n ? "sel" : "") })}
+			<div class="c-detail"><h3>${esc(sel.name)}</h3><span class="muted">${fmtLong(sel.n)} · ${sel.n < TODAY ? `${TODAY - sel.n} days ago` : inDays(sel.n)}</span>
+			${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}${bridges}</div></main>
+		</div>`,
+	};
+}
+
+function variantD() {
+	const d = data();
+	const upcoming = d.stretches.filter((st) => st.e >= TODAY && ymd(st.s)[0] <= YEARS.at(-1)).slice(0, 24);
+	const parts = [];
+	let year = ymd(TODAY)[0], dividerShown = false;
+	upcoming.forEach((st, i) => {
+		const y = ymd(st.s)[0];
+		if (st.predicted && !dividerShown) { dividerShown = true; parts.push(`<div class="d-divider">Predicted from the usual rules · gov.uk hasn’t published these yet</div>`); }
+		if (y !== year) { year = y; parts.push(`<div class="d-year">${y}</div>`); }
+		const days = [];
+		for (let k = st.s; k <= st.e; k++) { const [, , dd] = ymd(k); days.push(`<div class="d-day ${d.byN.has(k) ? "bh" : ""}"><small>${WEEK[wd(k)]}</small><b>${dd}</b></div>`); }
+		const names = [...new Set(st.bh.map((h) => h.name.replace(" bank holiday", "")))].join(" & ");
+		const len = st.e - st.s + 1;
+		const subs = st.bh.filter((h) => h.sub).map((h) => `${h.name} moves to ${fmt(h.n)}`);
+		parts.push(`<div class="d-card ${st.predicted ? "pred" : ""} ${i === 0 ? "first" : ""}"><div class="d-top"><span class="n">${esc(names)}</span><span class="when">${inDays(st.bh[0].n)}</span></div>
+		<div class="d-days">${days.join("")}</div><div class="d-sub">${len} days off${st.fdw ? " · four-day weekend" : ""}${subs.length ? ` · ${subs.join(", ")}` : ""}</div></div>`);
+		if (st.bridgeOut && upcoming[i + 1] === st.bridgeOut.b) {
+			const br = st.bridgeOut;
+			parts.push(`<div class="d-bridge"><b>Bridge${br.predicted ? " · predicted" : ""}</b><span>${bridgeText(br)}</span></div>`);
+		}
+	});
+	return {
+		w: 440, h: 640,
+		html: `<div class="titlebar">${lights}<strong style="font-size:13px">Up next</strong><div class="spacer"></div>
+		<select class="popup" id="d-div" aria-label="Division">${Object.entries(DIVISIONS).map(([k, v]) => `<option value="${k}" ${k === state.division ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+		<div class="win-body"><div class="d-stream scroll">${parts.join("")}</div></div>`,
+	};
+}
+
+const VARIANTS = [
+	{ key: "A", name: "Agenda", render: variantA, notes: `
+		<p>A narrow list of the year's bank holidays, grouped by month. A big countdown to the next one sits on top. A bracket ties together the bank holidays of a four-day weekend, and a bridge gets its own dashed row between the two holidays it joins.</p>
+		<ul><li>Closest to <code>List</code> + <code>Tag</code> in gpui-kit, and no hand-drawn grid needed.</li><li>You never see the days in between, so a bridge's weekdays are only text.</li><li>A bridge from Christmas sits in the Christmas year. The New Year end has no marker.</li></ul>` },
+	{ key: "B", name: "Year wall", render: variantB, notes: `
+		<p>All twelve months as small hand-drawn grids, like a wall planner. Bank holidays are filled red dots and predicted ones dashed. Four-day weekends get a tinted run of days and bridge days are hatched amber. Hover a day to read it in the status bar.</p>
+		<ul><li>Shows four-day weekends and bridges as shapes, which is the reason the app exists.</li><li>The widest window by far, and it relies on hover to read names.</li><li>Year and division live in the title bar, and the next holiday is a chip.</li></ul>` },
+	{ key: "C", name: "Split", render: variantC, notes: `
+		<p>A sidebar lists the year's bank holidays with a dot for four-day weekend, bridge or predicted. Selecting one shows its month large, with a detail panel explaining the four-day weekend or bridge around it.</p>
+		<ul><li>Fits macOS conventions (source list plus detail) and makes keyboard navigation natural: ↑ ↓ through holidays.</li><li>Only one month is visible at a time.</li><li>The detail panel is where the "book 3, get 10" wording has room.</li></ul>` },
+	{ key: "D", name: "Up next", render: variantD, notes: `
+		<p>No year view at all. A rolling stream of upcoming stretches of days off, each a card showing its days, with bridges as connectors between cards. Easter is one card, not two rows. Predicted cards sit below a dashed divider. The division is a pop-up menu.</p>
+		<ul><li>Answers "when's my next time off?" before anything else.</li><li>Organises by stretch of days off rather than by bank holiday, which changes what the core library returns.</li><li>Looking back, or at a specific year, isn't possible.</li></ul>` },
+];
+
+function render() {
+	const v = VARIANTS.find((x) => x.key === state.variant) ?? VARIANTS[0];
+	const { w, h, html } = v.render();
+	const win = document.getElementById("win");
+	win.className = "win";
+	win.style.width = `${w}px`;
+	win.style.height = `${h}px`;
+	win.innerHTML = html;
+	document.getElementById("label").textContent = `${v.key} · ${v.name} · ${w}×${h}`;
+	document.getElementById("notes").innerHTML = `<h2>${v.key} · ${v.name}</h2>${v.notes}`;
+}
+
+function setVariant(k) {
+	state.variant = k;
+	state.hover = null;
+	try { history.replaceState(null, "", `#${k}`); } catch {}
+	render();
+}
+function cycle(step) {
+	const i = VARIANTS.findIndex((x) => x.key === state.variant);
+	setVariant(VARIANTS[(i + step + VARIANTS.length) % VARIANTS.length].key);
+}
+
+document.addEventListener("click", (e) => {
+	const t = e.target.closest("button");
+	if (!t) return;
+	if (t.id === "prev") return cycle(-1);
+	if (t.id === "next") return cycle(1);
+	if (t.id === "theme") {
+		const root = document.documentElement;
+		const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+		root.dataset.theme = dark ? "light" : "dark";
+		return;
+	}
+	if (t.dataset.div) { state.division = t.dataset.div; state.selected = null; return render(); }
+	if (t.dataset.year) {
+		const y = state.year + Number(t.dataset.year);
+		if (!YEARS.includes(y)) return;
+		state.year = y;
+		state.selected = null;
+		return render();
+	}
+	if (t.dataset.sel) { state.selected = Number(t.dataset.sel); return render(); }
+});
+document.addEventListener("change", (e) => {
+	if (e.target.id !== "d-div") return;
+	state.division = e.target.value;
+	render();
+});
+document.addEventListener("mouseover", (e) => {
+	if (state.variant !== "B") return;
+	const c = e.target.closest(".cell[data-n]");
+	if (!c) return;
+	const n = Number(c.dataset.n);
+	if (n === state.hover) return;
+	state.hover = n;
+	const status = document.getElementById("b-status");
+	if (status) status.innerHTML = describeDay(n);
+});
+document.addEventListener("keydown", (e) => {
+	if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+	if (e.key === "ArrowLeft") cycle(-1);
+	if (e.key === "ArrowRight") cycle(1);
+});
+
+const initial = (location.hash.slice(1) || new URLSearchParams(location.search).get("variant") || "A").toUpperCase();
+state.variant = VARIANTS.some((x) => x.key === initial) ? initial : "A";
+render();
+</script>
