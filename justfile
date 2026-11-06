@@ -2,10 +2,6 @@
 
 set default-list
 
-# Build a release binary.
-build-release:
-  cargo build --release
-
 # Format the source code.
 format:
   cargo fmt
@@ -25,7 +21,8 @@ test:
 # Install a git pre-commit hook that runs `format-check` and `lint`.
 tools:
   #!/usr/bin/env sh
-  hook="$(git rev-parse --git-dir)/hooks/pre-commit"
+  set -e
+  hook="$(git rev-parse --git-path hooks/pre-commit)"
   printf '%s\n' '#!/usr/bin/env sh' 'set -e' 'just format-check' 'just lint' > "$hook"
   chmod +x "$hook"
   echo "Installed pre-commit hook."
