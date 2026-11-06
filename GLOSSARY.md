@@ -16,6 +16,10 @@ _Avoid_: Estimated holiday, future holiday
 A run of four or more consecutive days off, made of two or more bank holidays with only weekend days between them, that touches a weekend. Good Friday to Easter Monday is the usual case.
 _Avoid_: Long weekend
 
+**Bridge**:
+A run of at most eight working days that, booked as leave, joins two stretches of days off that each contain a bank holiday. Christmas to New Year is the usual case. Unlike a four-day weekend, it costs leave.
+_Avoid_: Bridge day, gap, leave days
+
 **Division**:
 One of the three UK regions with its own bank holiday calendar: England and Wales, Scotland, Northern Ireland.
 _Avoid_: Region, country, nation
