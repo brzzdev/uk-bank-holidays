@@ -1,0 +1,21 @@
+[package]
+name = "uk-bank-holidays"
+version = "0.1.0"
+edition = "2024"
+description = "Desktop app for UK bank holidays, built on GPUI"
+license = "MIT"
+publish = false
+readme = "README.md"
+repository = "https://github.com/brzzdev/uk-bank-holidays"
+rust-version = "1.99"
+
+[dependencies]
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+missing_errors_doc = "allow"
+mod_module_files = "warn"
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
