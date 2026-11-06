@@ -5,6 +5,7 @@ edition = "2024"
 description = "Desktop app for UK bank holidays, built on GPUI"
 license = "MIT"
 publish = false
+readme = "README.md"
 repository = "https://github.com/brzzdev/uk-bank-holidays"
 rust-version = "1.99"
 
