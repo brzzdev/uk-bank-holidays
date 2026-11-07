@@ -1,10 +1,11 @@
 [package]
 name = "bank-holidays-cli"
-version = "0.1.0"
+version.workspace = true
 description = "Command-line UK bank holidays"
 edition.workspace = true
 license.workspace = true
-publish = false
+publish.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [lints]

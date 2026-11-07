@@ -1,14 +1,13 @@
-use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
-    AppContext, Context, IntoElement, Render, Styled, Window, WindowOptions, application, assets,
-    div, init, open_window,
+    AppContext, Context, IntoElement, Render, Window, WindowOptions, application, assets, div,
+    init, open_window,
 };
 
 struct BankHolidays;
 
 impl Render for BankHolidays {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().bg(cx.theme().background)
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
     }
 }
 

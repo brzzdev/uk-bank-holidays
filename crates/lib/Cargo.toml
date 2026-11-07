@@ -1,10 +1,11 @@
 [package]
 name = "bank-holidays"
-version = "0.1.0"
+version.workspace = true
 description = "UK bank holidays: the gov.uk feed, predictions and classification"
 edition.workspace = true
 license.workspace = true
-publish = false
+publish.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [lints]

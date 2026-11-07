@@ -11,7 +11,7 @@
     {
       "description": "gpui-kit ships breaking pre-1.0 minors weekly; take them as they land, and fix a red upgrade by hand on its branch.",
       "matchPackageNames": ["gpui-kit"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchUpdateTypes": ["minor"],
       "automerge": true
     }
   ]
