@@ -1,12 +1,12 @@
 [package]
 name = "bank-holidays-app"
-version.workspace = true
 description = "Desktop app for UK bank holidays, built on GPUI"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
