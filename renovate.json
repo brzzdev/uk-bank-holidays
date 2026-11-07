@@ -3,5 +3,16 @@
   "extends": [
     "github>brzzdev/renovate-config:automerge",
     "github>brzzdev/renovate-config:rust"
+  ],
+  "lockFileMaintenance": {
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "gpui-kit ships breaking pre-1.0 minors weekly; take them as they land, and fix a red upgrade by hand on its branch.",
+      "matchPackageNames": ["gpui-kit"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
   ]
 }
