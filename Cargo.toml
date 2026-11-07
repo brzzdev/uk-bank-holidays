@@ -1,17 +1,16 @@
-[package]
-name = "uk-bank-holidays"
-version = "0.1.0"
+[workspace]
+members = ["crates/app", "crates/cli", "crates/lib"]
+resolver = "3"
+
+[workspace.package]
 edition = "2024"
-description = "Desktop app for UK bank holidays, built on GPUI"
 license = "MIT"
 publish = false
-readme = "README.md"
 repository = "https://github.com/brzzdev/uk-bank-holidays"
 rust-version = "1.99"
+version = "0.1.0"
 
-[dependencies]
-
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"

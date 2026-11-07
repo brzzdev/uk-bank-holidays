@@ -17,7 +17,7 @@ This repo is **single-context**:
 /
 ├── GLOSSARY.md
 ├── docs/adr/
-└── src/
+└── crates/
 ```
 
 ## Use the glossary's vocabulary

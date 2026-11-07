@@ -1,0 +1,12 @@
+[package]
+name = "bank-holidays"
+description = "UK bank holidays from the gov.uk feed, with predicted bank holidays, four-day weekends and bridges"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
