@@ -146,42 +146,37 @@ mod tests {
         s.parse().expect("test dates are valid")
     }
 
-    /// A feed where every division has the same events, each `(date, title)`.
-    fn dated_feed(as_of: &str, events: &[(&str, &str)]) -> DatedFeed {
-        let events: Vec<_> = events
-            .iter()
-            .map(|(date, title)| {
-                serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
+    /// A feed of each division's events, each `(date, title)`.
+    fn feed(as_of: &str, divisions: [(&str, &[(&str, &str)]); 3]) -> DatedFeed {
+        let json: serde_json::Map<_, _> = divisions
+            .into_iter()
+            .map(|(division, events)| {
+                let events: Vec<_> = events
+                    .iter()
+                    .map(|(date, title)| {
+                        serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
+                    })
+                    .collect();
+                (division.to_owned(), serde_json::json!({ "events": events }))
             })
             .collect();
-        let division = serde_json::json!({ "events": events });
-        let json = serde_json::json!({
-            "england-and-wales": division,
-            "northern-ireland": division,
-            "scotland": division,
-        });
         DatedFeed {
             as_of: date(as_of),
-            feed: Feed::parse(json.to_string().as_bytes()).expect("test feeds are valid"),
-        }
-    }
-
-    /// A feed with one Christmas Day per division, in the year given for it.
-    fn feed_ending(last_years: [(&str, i32); 3]) -> DatedFeed {
-        let json: serde_json::Map<_, _> = last_years
-            .into_iter()
-            .map(|(division, year)| {
-                let event = serde_json::json!(
-                    {"title": "Christmas Day", "date": format!("{year}-12-25"), "notes": "", "bunting": true}
-                );
-                (division.to_owned(), serde_json::json!({ "events": [event] }))
-            })
-            .collect();
-        DatedFeed {
-            as_of: date("2025-06-01"),
             feed: Feed::parse(serde_json::Value::Object(json).to_string().as_bytes())
                 .expect("test feeds are valid"),
         }
+    }
+
+    /// A feed where every division has the same events, each `(date, title)`.
+    fn dated_feed(as_of: &str, events: &[(&str, &str)]) -> DatedFeed {
+        feed(
+            as_of,
+            [
+                ("england-and-wales", events),
+                ("northern-ireland", events),
+                ("scotland", events),
+            ],
+        )
     }
 
     fn names(holidays: &Holidays, year: i32) -> Vec<(NaiveDate, &str)> {
@@ -272,11 +267,15 @@ mod tests {
 
     #[test]
     fn each_division_predicts_from_the_year_after_its_own_last_published_year() {
-        let snapshot = feed_ending([
-            ("england-and-wales", 2026),
-            ("northern-ireland", 2026),
-            ("scotland", 2025),
-        ]);
+        let christmas_2026: &[_] = &[("2026-12-25", "Christmas Day")];
+        let snapshot = feed(
+            "2025-06-01",
+            [
+                ("england-and-wales", christmas_2026),
+                ("northern-ireland", christmas_2026),
+                ("scotland", &[("2025-12-25", "Christmas Day")]),
+            ],
+        );
         let holidays = merge(&snapshot, None, 2025);
         let first_of_2026 = |division| {
             let holiday = &holidays

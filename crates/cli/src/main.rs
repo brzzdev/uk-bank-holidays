@@ -396,6 +396,15 @@ mod tests {
     }
 
     #[test]
+    fn the_year_range_runs_two_years_past_the_current_year_when_it_is_past_the_data() {
+        let outcome = run_on("2028-06-01", &["list", "2031"]);
+        assert_eq!(
+            outcome.stderr,
+            "bank-holidays: no bank holidays for 2031 (have 2025–2030)\n"
+        );
+    }
+
+    #[test]
     fn an_unknown_division_flag_command_or_year_is_a_usage_error() {
         for args in [
             &["-d", "wales"][..],

@@ -141,11 +141,7 @@ fn actual(date: NaiveDate, title: &str) -> BankHoliday {
 }
 
 fn substitute(date: NaiveDate, title: &str) -> BankHoliday {
-    BankHoliday {
-        date,
-        name: substitute_name(title),
-        predicted: true,
-    }
+    actual(date, &substitute_name(title))
 }
 
 fn first_monday(year: i32, month: u32) -> NaiveDate {
@@ -170,22 +166,22 @@ mod tests {
     use crate::snapshot;
 
     /// Dates the feed has, or lacks, only because a proclamation moved or added a day.
-    const PROCLAIMED_ONE_OFFS: [&str; 8] = [
-        "2020-05-04", // early May moved to VE Day
-        "2020-05-08",
-        "2022-05-30", // spring moved for the Platinum Jubilee
-        "2022-06-02",
-        "2022-06-03",
-        "2022-09-19",
-        "2023-05-08",
-        "2026-06-15",
+    const PROCLAIMED_ONE_OFFS: [(&str, &[Division]); 8] = [
+        ("2020-05-04", &Division::ALL),        // early May moved to VE Day…
+        ("2020-05-08", &Division::ALL),        // …here
+        ("2022-05-30", &Division::ALL),        // spring moved for the Platinum Jubilee…
+        ("2022-06-02", &Division::ALL),        // …here
+        ("2022-06-03", &Division::ALL),        // Platinum Jubilee
+        ("2022-09-19", &Division::ALL),        // State Funeral of Queen Elizabeth II
+        ("2023-05-08", &Division::ALL),        // coronation of King Charles III
+        ("2026-06-15", &[Division::Scotland]), // World Cup
     ];
 
     #[test]
     fn the_rules_reproduce_every_published_bank_holiday_but_the_proclaimed_one_offs() {
-        let one_offs: Vec<NaiveDate> = PROCLAIMED_ONE_OFFS
+        let one_offs: Vec<(NaiveDate, &[Division])> = PROCLAIMED_ONE_OFFS
             .iter()
-            .map(|date| date.parse().expect("one-off dates are valid"))
+            .map(|&(date, divisions)| (date.parse().expect("one-off dates are valid"), divisions))
             .collect();
         let feed = snapshot().feed;
         for division in Division::ALL {
@@ -200,7 +196,11 @@ mod tests {
                 let predicted = as_set(predict(year, division));
                 let differences: Vec<_> = published
                     .symmetric_difference(&predicted)
-                    .filter(|(date, _)| !one_offs.contains(date))
+                    .filter(|(date, _)| {
+                        !one_offs.iter().any(|(one_off, divisions)| {
+                            one_off == date && divisions.contains(&division)
+                        })
+                    })
                     .collect();
                 assert!(
                     differences.is_empty(),
