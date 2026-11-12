@@ -12,7 +12,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyDivision(division) => write!(f, "the feed has no events for {division}"),
+            Self::EmptyDivision(division) => {
+                write!(f, "the feed has no events for {}", division.key())
+            }
             Self::Feed(error) => write!(f, "couldn't read the feed: {error}"),
             Self::UnknownDivision(division) => write!(
                 f,

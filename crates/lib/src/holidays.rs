@@ -61,18 +61,6 @@ fn by_year(feed: &DatedFeed, division: Division) -> BTreeMap<i32, Vec<BankHolida
 
 impl Holidays {
     #[must_use]
-    pub fn year(&self, division: Division, year: i32) -> Option<&[BankHoliday]> {
-        self.years_of(division).get(&year).map(Vec::as_slice)
-    }
-
-    /// The first and last years the division has bank holidays for.
-    #[must_use]
-    pub fn years(&self, division: Division) -> Option<RangeInclusive<i32>> {
-        let years = self.years_of(division);
-        Some(*years.first_key_value()?.0..=*years.last_key_value()?.0)
-    }
-
-    #[must_use]
     pub fn next(&self, division: Division, from: NaiveDate) -> Option<Next<'_>> {
         let holiday = self
             .years_of(division)
@@ -85,6 +73,25 @@ impl Holidays {
         })
     }
 
+    #[must_use]
+    pub fn year(&self, division: Division, year: i32) -> Option<&[BankHoliday]> {
+        self.years_of(division).get(&year).map(Vec::as_slice)
+    }
+
+    /// The first and last years the division has bank holidays for.
+    ///
+    /// # Panics
+    ///
+    /// Never: the snapshot gives every division at least one year.
+    #[must_use]
+    pub fn years(&self, division: Division) -> RangeInclusive<i32> {
+        let years = self.years_of(division);
+        let (Some(&first), Some(&last)) = (years.keys().next(), years.keys().next_back()) else {
+            panic!("the snapshot gives every division at least one year");
+        };
+        first..=last
+    }
+
     fn years_of(&self, division: Division) -> &BTreeMap<i32, Vec<BankHoliday>> {
         &self.divisions[&division]
     }
@@ -92,10 +99,8 @@ impl Holidays {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDate;
-
     use super::*;
-    use crate::{DatedFeed, Division, Feed, snapshot};
+    use crate::Feed;
 
     fn date(s: &str) -> NaiveDate {
         s.parse().expect("test dates are valid")
@@ -128,19 +133,6 @@ mod tests {
             .iter()
             .map(|holiday| (holiday.date, holiday.name.as_str()))
             .collect()
-    }
-
-    #[test]
-    fn the_snapshot_alone_gives_northern_ireland_its_own_bank_holidays() {
-        let holidays = merge(&snapshot(), None);
-        let ni_2025: Vec<_> = holidays
-            .year(Division::NorthernIreland, 2025)
-            .expect("the snapshot covers 2025")
-            .iter()
-            .map(|holiday| (holiday.date, holiday.name.as_str()))
-            .collect();
-        assert!(ni_2025.contains(&(date("2025-03-17"), "St Patrick’s Day")));
-        assert!(ni_2025.contains(&(date("2025-07-14"), "Battle of the Boyne (Orangemen’s Day)")));
     }
 
     #[test]

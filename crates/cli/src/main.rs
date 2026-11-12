@@ -29,6 +29,8 @@ information licensed under the Open Government Licence v3.0
 Predicted bank holidays are calculated by this tool and are not published by GOV.UK.
 ";
 const NAME: &str = "bank-holidays";
+const RUNTIME_FAILURE: u8 = 1;
+const USAGE_ERROR: u8 = 2;
 
 /// What a run prints and the code it exits with.
 #[derive(Debug)]
@@ -55,9 +57,6 @@ impl Outcome {
         }
     }
 }
-
-const RUNTIME_FAILURE: u8 = 1;
-const USAGE_ERROR: u8 = 2;
 
 enum Command {
     Help,
@@ -109,10 +108,15 @@ fn run(
         Command::List(year) => {
             let year = year.unwrap_or(today.year());
             let Some(year_holidays) = holidays.year(division, year) else {
-                let have = holidays.years(division).map_or_else(String::new, |years| {
-                    format!(" (have {}–{})", years.start(), years.end())
-                });
-                return Outcome::failure(USAGE_ERROR, format!("no bank holidays for {year}{have}"));
+                let have = holidays.years(division);
+                return Outcome::failure(
+                    USAGE_ERROR,
+                    format!(
+                        "no bank holidays for {year} (have {}–{})",
+                        have.start(),
+                        have.end()
+                    ),
+                );
             };
             Outcome::success(match options.format {
                 Format::Json => json(
@@ -170,19 +174,13 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
         match arg {
             Short('d') | Long("division") => division = parser.value()?.parse()?,
             Short('h') | Long("help") => {
-                return Ok(Options {
-                    command: Command::Help,
-                    division,
-                    format,
-                });
+                command = Some(Command::Help);
+                break;
             }
             Long("json") => format = Format::Json,
             Short('V') | Long("version") => {
-                return Ok(Options {
-                    command: Command::Version,
-                    division,
-                    format,
-                });
+                command = Some(Command::Version);
+                break;
             }
             Value(value) if command.is_none() && value == "list" => {
                 command = Some(Command::List(None));
@@ -203,7 +201,7 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
 
 fn to_json(holiday: &BankHoliday, division: Division) -> serde_json::Value {
     serde_json::json!({
-        "date": holiday.date.to_string(),
+        "date": holiday.date,
         "division": division.key(),
         "name": holiday.name,
     })
@@ -217,9 +215,6 @@ fn json(value: &serde_json::Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use bank_holidays::{merge, snapshot};
-    use chrono::NaiveDate;
-
     use super::*;
 
     fn run_on(today: &str, args: &[&str]) -> Outcome {
@@ -227,7 +222,7 @@ mod tests {
         run(args.iter().copied(), today, &merge(&snapshot(), None))
     }
 
-    fn json(outcome: &Outcome) -> serde_json::Value {
+    fn parsed(outcome: &Outcome) -> serde_json::Value {
         serde_json::from_str(&outcome.stdout).expect("--json prints JSON")
     }
 
@@ -275,7 +270,7 @@ mod tests {
             "2025-01-01",
             &["list", "--json", "--division", "northern-ireland"],
         );
-        let first = &json(&outcome)[0];
+        let first = &parsed(&outcome)[0];
         assert_eq!(
             *first,
             serde_json::json!({
@@ -290,7 +285,7 @@ mod tests {
     fn next_json_is_one_object() {
         let outcome = run_on("2025-12-20", &["next", "--json"]);
         assert_eq!(
-            json(&outcome),
+            parsed(&outcome),
             serde_json::json!({
                 "date": "2025-12-25",
                 "division": "england-and-wales",

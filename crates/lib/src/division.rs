@@ -1,9 +1,8 @@
-use std::fmt;
 use std::str::FromStr;
 
 use crate::Error;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Division {
     EnglandAndWales,
     NorthernIreland,
@@ -21,12 +20,6 @@ impl Division {
             Self::NorthernIreland => "northern-ireland",
             Self::Scotland => "scotland",
         }
-    }
-}
-
-impl fmt::Display for Division {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.key())
     }
 }
 

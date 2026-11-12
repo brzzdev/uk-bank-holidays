@@ -7,14 +7,14 @@ use crate::{Division, Error};
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Feed {
-    pub england_and_wales: DivisionFeed,
-    pub northern_ireland: DivisionFeed,
-    pub scotland: DivisionFeed,
+    england_and_wales: DivisionFeed,
+    northern_ireland: DivisionFeed,
+    scotland: DivisionFeed,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DivisionFeed {
-    pub events: Vec<Event>,
+struct DivisionFeed {
+    events: Vec<Event>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,13 +30,13 @@ impl Feed {
     /// Parses a feed, rejecting one with a division that has no events.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         let feed: Self = serde_json::from_slice(bytes).map_err(Error::Feed)?;
-        match Division::ALL
+        let empty = Division::ALL
             .into_iter()
-            .find(|&division| feed.events(division).is_empty())
-        {
-            Some(division) => Err(Error::EmptyDivision(division)),
-            None => Ok(feed),
+            .find(|&division| feed.events(division).is_empty());
+        if let Some(division) = empty {
+            return Err(Error::EmptyDivision(division));
         }
+        Ok(feed)
     }
 
     #[must_use]
