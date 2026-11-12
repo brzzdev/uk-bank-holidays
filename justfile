@@ -19,26 +19,28 @@ install-app:
     echo "error: bank-holidays-app's version is $version; an app bundle needs a plain X.Y.Z" >&2
     exit 1
   fi
-  MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release -p bank-holidays-app
+  src=crates/app/bundle
+  MACOSX_DEPLOYMENT_TARGET="$(plutil -extract LSMinimumSystemVersion raw "$src/Info.plist")" cargo build --release -p bank-holidays-app
   app='target/Bank Holidays.app'
-  iconset='target/AppIcon.iconset'
+  iconset=target/AppIcon.iconset
+  installed="$HOME/Applications/Bank Holidays.app"
+  plist="$app/Contents/Info.plist"
   rm -rf "$app" "$iconset"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$iconset"
   install -m 755 target/release/bank-holidays-app "$app/Contents/MacOS/"
-  cp crates/app/bundle/Info.plist "$app/Contents/"
-  plutil -insert CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
-  plutil -insert CFBundleVersion -string "$version" "$app/Contents/Info.plist"
-  cp crates/app/bundle/Credits.rtf "$app/Contents/Resources/"
+  cp "$src/Info.plist" "$plist"
+  plutil -insert CFBundleShortVersionString -string "$version" "$plist"
+  plutil -insert CFBundleVersion -string "$version" "$plist"
+  cp "$src/Credits.rtf" "$app/Contents/Resources/"
   for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" crates/app/bundle/icon.png --out "$iconset/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" crates/app/bundle/icon.png --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$size" "$size" "$src/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" "$src/icon.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
   done
   iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
   codesign --force --sign - "$app"
-  rm -rf "$HOME/Applications/Bank Holidays.app"
-  mkdir -p "$HOME/Applications"
-  ditto "$app" "$HOME/Applications/Bank Holidays.app"
-  echo "Installed ~/Applications/Bank Holidays.app $version."
+  rm -rf "$installed"
+  ditto "$app" "$installed"
+  echo "Installed $installed $version."
 
 # Lint the source code.
 lint:
