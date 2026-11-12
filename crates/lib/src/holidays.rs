@@ -3,12 +3,42 @@ use std::ops::RangeInclusive;
 
 use chrono::{Datelike, NaiveDate};
 
-use crate::{DatedFeed, Division, Feed};
+use crate::predict::predict;
+use crate::{DatedFeed, Division, Event, Feed};
+
+/// The `notes` the feed gives a substitute day.
+const SUBSTITUTE_DAY_NOTE: &str = "Substitute day";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BankHoliday {
     pub date: NaiveDate,
+    /// gov.uk's name, ending " (substitute day)" on a substitute day.
     pub name: String,
+    pub predicted: bool,
+}
+
+impl BankHoliday {
+    pub(crate) fn new(date: NaiveDate, title: &str, substitute: bool, predicted: bool) -> Self {
+        let name = if substitute {
+            format!("{title} (substitute day)")
+        } else {
+            title.to_owned()
+        };
+        Self {
+            date,
+            name,
+            predicted,
+        }
+    }
+
+    pub(crate) fn published(event: &Event) -> Self {
+        Self::new(
+            event.date,
+            &event.title,
+            event.notes == SUBSTITUTE_DAY_NOTE,
+            false,
+        )
+    }
 }
 
 /// The next bank holiday on or after a day, and how many days away it is.
@@ -24,12 +54,18 @@ pub struct Holidays {
     divisions: HashMap<Division, BTreeMap<i32, Vec<BankHoliday>>>,
 }
 
+/// How many years past the later of the published data's last year and the current year
+/// predictions run.
+const PREDICTED_YEARS_AHEAD: i32 = 2;
+
 /// Merges the snapshot with the cache: the cache's copy of a year wins and the snapshot fills the
-/// years it lacks. A cache fetched before the snapshot was captured is ignored.
+/// years it lacks. A cache fetched before the snapshot was captured is ignored. Each division then
+/// gets predicted bank holidays from the year after its own last published year, through a last
+/// year shared by every division.
 #[must_use]
-pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
+pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>, current_year: i32) -> Holidays {
     let cache = cache.filter(|cache| cache.as_of >= snapshot.as_of);
-    let divisions = Division::ALL
+    let mut divisions: HashMap<_, _> = Division::ALL
         .into_iter()
         .map(|division| {
             let mut years = by_year(&snapshot.feed, division);
@@ -39,6 +75,20 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
             (division, years)
         })
         .collect();
+    let last_published = divisions
+        .values()
+        .filter_map(|years| years.keys().next_back().copied())
+        .max()
+        .unwrap_or(current_year);
+    let last_predicted = last_published.max(current_year) + PREDICTED_YEARS_AHEAD;
+    for (&division, years) in &mut divisions {
+        let Some(&last) = years.keys().next_back() else {
+            continue;
+        };
+        for year in last + 1..=last_predicted {
+            years.insert(year, predict(year, division));
+        }
+    }
     Holidays { divisions }
 }
 
@@ -48,10 +98,7 @@ fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
         years
             .entry(event.date.year())
             .or_default()
-            .push(BankHoliday {
-                date: event.date,
-                name: event.title.clone(),
-            });
+            .push(BankHoliday::published(event));
     }
     for holidays in years.values_mut() {
         holidays.sort_by_key(|holiday| holiday.date);
@@ -125,6 +172,23 @@ mod tests {
         }
     }
 
+    fn feed_ending(as_of: &str, last_years: [(&str, i32); 3]) -> DatedFeed {
+        let json: serde_json::Map<_, _> = last_years
+            .into_iter()
+            .map(|(division, year)| {
+                let event = serde_json::json!(
+                    {"title": "Christmas Day", "date": format!("{year}-12-25"), "notes": "", "bunting": true}
+                );
+                (division.to_owned(), serde_json::json!({ "events": [event] }))
+            })
+            .collect();
+        DatedFeed {
+            as_of: date(as_of),
+            feed: Feed::parse(serde_json::Value::Object(json).to_string().as_bytes())
+                .expect("test feeds are valid"),
+        }
+    }
+
     fn names(holidays: &Holidays, year: i32) -> Vec<(NaiveDate, &str)> {
         holidays
             .year(Division::EnglandAndWales, year)
@@ -150,7 +214,7 @@ mod tests {
                 ("2026-12-28", "Boxing Day"),
             ],
         );
-        let holidays = merge(&snapshot, Some(&cache));
+        let holidays = merge(&snapshot, Some(&cache), 2025);
         assert_eq!(
             names(&holidays, 2025),
             [(date("2025-12-25"), "Christmas Day")]
@@ -168,7 +232,7 @@ mod tests {
     fn a_cache_fetched_on_the_day_the_snapshot_was_captured_is_used() {
         let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
         let cache = dated_feed("2025-06-01", &[("2026-12-28", "Boxing Day")]);
-        let holidays = merge(&snapshot, Some(&cache));
+        let holidays = merge(&snapshot, Some(&cache), 2025);
         assert_eq!(names(&holidays, 2026), [(date("2026-12-28"), "Boxing Day")]);
     }
 
@@ -176,7 +240,7 @@ mod tests {
     fn a_cache_fetched_before_the_snapshot_was_captured_is_ignored() {
         let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
         let cache = dated_feed("2025-05-31", &[("2026-12-28", "Boxing Day")]);
-        let holidays = merge(&snapshot, Some(&cache));
+        let holidays = merge(&snapshot, Some(&cache), 2025);
         assert_eq!(
             names(&holidays, 2026),
             [(date("2026-12-25"), "Christmas Day")]
@@ -184,10 +248,65 @@ mod tests {
     }
 
     #[test]
+    fn predictions_run_to_two_years_after_the_data_when_the_data_is_current() {
+        let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
+        let holidays = merge(&snapshot, None, 2025);
+        for division in Division::ALL {
+            assert_eq!(holidays.years(division), 2026..=2028, "{division:?}");
+        }
+    }
+
+    #[test]
+    fn predictions_run_to_two_years_after_the_current_year_when_the_data_ends_before_it() {
+        let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
+        let holidays = merge(&snapshot, None, 2028);
+        for division in Division::ALL {
+            assert_eq!(holidays.years(division), 2026..=2030, "{division:?}");
+        }
+        let predicted = holidays
+            .year(Division::EnglandAndWales, 2030)
+            .expect("2030 is predicted");
+        assert_eq!(
+            (
+                predicted[0].date,
+                predicted[0].name.as_str(),
+                predicted[0].predicted
+            ),
+            (date("2030-01-01"), "New Year’s Day", true),
+        );
+    }
+
+    #[test]
+    fn each_division_predicts_from_the_year_after_its_own_last_published_year() {
+        let snapshot = feed_ending(
+            "2025-06-01",
+            [
+                ("england-and-wales", 2026),
+                ("northern-ireland", 2026),
+                ("scotland", 2025),
+            ],
+        );
+        let holidays = merge(&snapshot, None, 2025);
+        let first_of_2026 = |division| {
+            let holiday = &holidays
+                .year(division, 2026)
+                .expect("2026 has bank holidays")[0];
+            (holiday.name.as_str(), holiday.predicted)
+        };
+        assert_eq!(
+            first_of_2026(Division::EnglandAndWales),
+            ("Christmas Day", false)
+        );
+        assert_eq!(first_of_2026(Division::Scotland), ("New Year’s Day", true));
+        assert_eq!(holidays.years(Division::Scotland), 2025..=2028);
+    }
+
+    #[test]
     fn the_next_bank_holiday_on_its_own_day_is_zero_days_away() {
         let holidays = merge(
             &dated_feed("2025-06-01", &[("2025-12-25", "Christmas Day")]),
             None,
+            2025,
         );
         let next = holidays
             .next(Division::EnglandAndWales, date("2025-12-25"))
@@ -209,6 +328,7 @@ mod tests {
                 ],
             ),
             None,
+            2025,
         );
         let next = holidays
             .next(Division::EnglandAndWales, date("2025-12-27"))
@@ -217,13 +337,14 @@ mod tests {
     }
 
     #[test]
-    fn there_is_no_next_bank_holiday_after_the_last_one_in_the_data() {
+    fn there_is_no_next_bank_holiday_after_the_last_predicted_one() {
         let holidays = merge(
             &dated_feed("2025-06-01", &[("2025-12-25", "Christmas Day")]),
             None,
+            2025,
         );
         assert_eq!(
-            holidays.next(Division::EnglandAndWales, date("2025-12-26")),
+            holidays.next(Division::EnglandAndWales, date("2027-12-29")),
             None
         );
     }
