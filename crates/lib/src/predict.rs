@@ -1,5 +1,6 @@
 use chrono::{Datelike, Days, NaiveDate, Weekday};
 
+use crate::holidays::substitute_name;
 use crate::{BankHoliday, Division};
 
 const BATTLE_OF_THE_BOYNE: &str = "Battle of the Boyne (Orangemen’s Day)";
@@ -45,15 +46,15 @@ pub(crate) fn predict(year: i32, division: Division) -> Vec<BankHoliday> {
     if division != Division::Scotland {
         holidays.push(actual(easter + Days::new(1), EASTER_MONDAY));
     }
-    holidays.push(actual(monday_on_or_after(date(year, 5, 1)), EARLY_MAY));
-    holidays.push(actual(last_monday(date(year, 5, 31)), SPRING));
+    holidays.push(actual(first_monday(year, 5), EARLY_MAY));
+    holidays.push(actual(monday_on_or_before(date(year, 5, 31)), SPRING));
     if division == Division::NorthernIreland {
         holidays.push(single(date(year, 7, 12), BATTLE_OF_THE_BOYNE));
     }
     let summer = if division == Division::Scotland {
-        monday_on_or_after(date(year, 8, 1))
+        first_monday(year, 8)
     } else {
-        last_monday(date(year, 8, 31))
+        monday_on_or_before(date(year, 8, 31))
     };
     holidays.push(actual(summer, SUMMER));
     if division == Division::Scotland {
@@ -98,7 +99,10 @@ fn easter_sunday(year: i32) -> NaiveDate {
 /// A single fixed day, moved to the next Monday when it falls on a weekend.
 fn single(day: NaiveDate, title: &str) -> BankHoliday {
     match day.weekday() {
-        Weekday::Sat | Weekday::Sun => substitute(monday_on_or_after(day), title),
+        Weekday::Sat | Weekday::Sun => {
+            let monday = day + Days::new(u64::from(Weekday::Mon.days_since(day.weekday())));
+            substitute(monday, title)
+        }
         _ => actual(day, title),
     }
 }
@@ -129,19 +133,27 @@ fn pair(
 }
 
 fn actual(date: NaiveDate, title: &str) -> BankHoliday {
-    BankHoliday::new(date, title, false, true)
+    BankHoliday {
+        date,
+        name: title.to_owned(),
+        predicted: true,
+    }
 }
 
 fn substitute(date: NaiveDate, title: &str) -> BankHoliday {
-    BankHoliday::new(date, title, true, true)
+    BankHoliday {
+        date,
+        name: substitute_name(title),
+        predicted: true,
+    }
 }
 
-fn monday_on_or_after(day: NaiveDate) -> NaiveDate {
-    day + Days::new(u64::from((7 - day.weekday().num_days_from_monday()) % 7))
+fn first_monday(year: i32, month: u32) -> NaiveDate {
+    NaiveDate::from_weekday_of_month_opt(year, month, Weekday::Mon, 1)
+        .expect("every month has a first Monday")
 }
 
-/// The Monday on or before a day.
-fn last_monday(day: NaiveDate) -> NaiveDate {
+fn monday_on_or_before(day: NaiveDate) -> NaiveDate {
     day - Days::new(u64::from(day.weekday().num_days_from_monday()))
 }
 
@@ -151,11 +163,10 @@ fn date(year: i32, month: u32, day: u32) -> NaiveDate {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
-
-    use chrono::Datelike;
+    use std::collections::BTreeSet;
 
     use super::*;
+    use crate::holidays::by_year;
     use crate::snapshot;
 
     /// Dates the feed has, or lacks, only because a proclamation moved or added a day.
@@ -178,19 +189,15 @@ mod tests {
             .collect();
         let feed = snapshot().feed;
         for division in Division::ALL {
-            let mut published: BTreeMap<i32, BTreeSet<(NaiveDate, String)>> = BTreeMap::new();
-            for event in feed.events(division) {
-                let holiday = BankHoliday::published(event);
-                published
-                    .entry(holiday.date.year())
-                    .or_default()
-                    .insert((holiday.date, holiday.name));
-            }
-            for (&year, published) in &published {
-                let predicted: BTreeSet<_> = predict(year, division)
-                    .into_iter()
-                    .map(|holiday| (holiday.date, holiday.name))
-                    .collect();
+            for (year, published) in by_year(&feed, division) {
+                let as_set = |holidays: Vec<BankHoliday>| -> BTreeSet<_> {
+                    holidays
+                        .into_iter()
+                        .map(|holiday| (holiday.date, holiday.name))
+                        .collect()
+                };
+                let published = as_set(published);
+                let predicted = as_set(predict(year, division));
                 let differences: Vec<_> = published
                     .symmetric_difference(&predicted)
                     .filter(|(date, _)| !one_offs.contains(date))

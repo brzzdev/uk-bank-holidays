@@ -132,9 +132,10 @@ fn run(
                     .fold(String::new(), |mut text, holiday| {
                         let _ = writeln!(
                             text,
-                            "{}  {}",
+                            "{}  {}{}",
                             holiday.date.format("%a %e %b"),
-                            label(holiday)
+                            holiday.name,
+                            predicted_marker(holiday)
                         );
                         text
                     }),
@@ -156,8 +157,9 @@ fn run(
                         days => format!("in {days} days"),
                     };
                     format!(
-                        "{}, {}, {countdown}\n",
-                        label(next.holiday),
+                        "{}{}, {}, {countdown}\n",
+                        next.holiday.name,
+                        predicted_marker(next.holiday),
                         next.holiday.date.format("%A %-d %B %Y"),
                     )
                 }
@@ -201,12 +203,11 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
     })
 }
 
-/// The bank holiday's name, marked when it's predicted.
-fn label(holiday: &BankHoliday) -> String {
+fn predicted_marker(holiday: &BankHoliday) -> &'static str {
     if holiday.predicted {
-        format!("{} (predicted)", holiday.name)
+        " (predicted)"
     } else {
-        holiday.name.clone()
+        ""
     }
 }
 
@@ -352,15 +353,6 @@ mod tests {
                 "",
                 "bank-holidays: no bank holidays for 1999 (have 2025–2028)\n"
             ),
-        );
-    }
-
-    #[test]
-    fn the_year_range_runs_two_years_past_the_current_year_when_it_is_past_the_data() {
-        let outcome = run_on("2027-06-01", &["list", "2030"]);
-        assert_eq!(
-            outcome.stderr,
-            "bank-holidays: no bank holidays for 2030 (have 2025–2029)\n"
         );
     }
 

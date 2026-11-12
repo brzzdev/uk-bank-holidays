@@ -18,27 +18,22 @@ pub struct BankHoliday {
 }
 
 impl BankHoliday {
-    pub(crate) fn new(date: NaiveDate, title: &str, substitute: bool, predicted: bool) -> Self {
-        let name = if substitute {
-            format!("{title} (substitute day)")
+    pub(crate) fn published(event: &Event) -> Self {
+        let name = if event.notes == SUBSTITUTE_DAY_NOTE {
+            substitute_name(&event.title)
         } else {
-            title.to_owned()
+            event.title.clone()
         };
         Self {
-            date,
+            date: event.date,
             name,
-            predicted,
+            predicted: false,
         }
     }
+}
 
-    pub(crate) fn published(event: &Event) -> Self {
-        Self::new(
-            event.date,
-            &event.title,
-            event.notes == SUBSTITUTE_DAY_NOTE,
-            false,
-        )
-    }
+pub(crate) fn substitute_name(title: &str) -> String {
+    format!("{title} (substitute day)")
 }
 
 /// The next bank holiday on or after a day, and how many days away it is.
@@ -75,12 +70,11 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>, current_year: i32)
             (division, years)
         })
         .collect();
-    let last_published = divisions
+    let last_predicted = divisions
         .values()
         .filter_map(|years| years.keys().next_back().copied())
-        .max()
-        .unwrap_or(current_year);
-    let last_predicted = last_published.max(current_year) + PREDICTED_YEARS_AHEAD;
+        .fold(current_year, i32::max)
+        + PREDICTED_YEARS_AHEAD;
     for (&division, years) in &mut divisions {
         let Some(&last) = years.keys().next_back() else {
             continue;
@@ -92,7 +86,7 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>, current_year: i32)
     Holidays { divisions }
 }
 
-fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
+pub(crate) fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
     let mut years: BTreeMap<i32, Vec<BankHoliday>> = BTreeMap::new();
     for event in feed.events(division) {
         years
@@ -172,7 +166,8 @@ mod tests {
         }
     }
 
-    fn feed_ending(as_of: &str, last_years: [(&str, i32); 3]) -> DatedFeed {
+    /// A feed with one Christmas Day per division, in the year given for it.
+    fn feed_ending(last_years: [(&str, i32); 3]) -> DatedFeed {
         let json: serde_json::Map<_, _> = last_years
             .into_iter()
             .map(|(division, year)| {
@@ -183,7 +178,7 @@ mod tests {
             })
             .collect();
         DatedFeed {
-            as_of: date(as_of),
+            as_of: date("2025-06-01"),
             feed: Feed::parse(serde_json::Value::Object(json).to_string().as_bytes())
                 .expect("test feeds are valid"),
         }
@@ -263,29 +258,25 @@ mod tests {
         for division in Division::ALL {
             assert_eq!(holidays.years(division), 2026..=2030, "{division:?}");
         }
-        let predicted = holidays
-            .year(Division::EnglandAndWales, 2030)
-            .expect("2030 is predicted");
         assert_eq!(
-            (
-                predicted[0].date,
-                predicted[0].name.as_str(),
-                predicted[0].predicted
-            ),
-            (date("2030-01-01"), "New Year’s Day", true),
+            holidays
+                .year(Division::EnglandAndWales, 2030)
+                .and_then(<[_]>::first),
+            Some(&BankHoliday {
+                date: date("2030-01-01"),
+                name: "New Year’s Day".to_owned(),
+                predicted: true,
+            }),
         );
     }
 
     #[test]
     fn each_division_predicts_from_the_year_after_its_own_last_published_year() {
-        let snapshot = feed_ending(
-            "2025-06-01",
-            [
-                ("england-and-wales", 2026),
-                ("northern-ireland", 2026),
-                ("scotland", 2025),
-            ],
-        );
+        let snapshot = feed_ending([
+            ("england-and-wales", 2026),
+            ("northern-ireland", 2026),
+            ("scotland", 2025),
+        ]);
         let holidays = merge(&snapshot, None, 2025);
         let first_of_2026 = |division| {
             let holiday = &holidays
