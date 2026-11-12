@@ -1,1 +1,21 @@
+mod division;
+mod error;
+mod feed;
+mod holidays;
+mod snapshot;
 
+pub use division::Division;
+pub use error::Error;
+pub use feed::{DatedFeed, Event, Feed};
+pub use holidays::{BankHoliday, Holidays, Next, merge};
+pub use snapshot::snapshot;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_committed_snapshot_and_its_capture_date_parse() {
+        let _ = snapshot();
+    }
+}

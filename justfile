@@ -57,6 +57,20 @@ install-app:
 lint:
   cargo clippy --all-targets -- -D warnings
 
+# Refresh the gov.uk feed snapshot built into the library, and its capture date.
+snapshot:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  data=crates/lib/data
+  download="$(mktemp "$data/bank-holidays.json.XXXXXX")"
+  trap 'rm -f "$download"' EXIT
+  curl --fail --silent --show-error --max-time 30 --output "$download" https://www.gov.uk/bank-holidays.json
+  cargo run --quiet --package bank-holidays --example check_feed -- "$download"
+  chmod 644 "$download"
+  mv "$download" "$data/bank-holidays.json"
+  date -u +%F > "$data/captured"
+  echo "Snapshot captured $(cat "$data/captured")."
+
 # Run the test suite.
 test:
   cargo test
