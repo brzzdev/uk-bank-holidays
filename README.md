@@ -13,7 +13,7 @@ Early days: the workspace is scaffolded, and the app itself is still to come. It
 
 ## Development
 
-Needs Rust 1.99 or newer, [`just`](https://just.systems), and, for `just install-app`, `jq`.
+Needs Rust 1.100 or newer, [`just`](https://just.systems), and, for `just install-app`, `jq`.
 
 ```sh
 just test          # run the test suite

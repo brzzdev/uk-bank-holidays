@@ -16,7 +16,7 @@ install-app:
   set -euo pipefail
   package=bank-holidays-app
   bundle='Bank Holidays.app'
-  resources=crates/app/bundle
+  sources=crates/app/bundle
   metadata="$(cargo metadata --no-deps --format-version 1)"
   version="$(jq -r --arg package "$package" '.packages[] | select(.name == $package) | .version' <<<"$metadata")"
   if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -24,9 +24,14 @@ install-app:
     exit 1
   fi
   target="$(jq -r .target_directory <<<"$metadata")"
-  executable="$(MACOSX_DEPLOYMENT_TARGET="$(plutil -extract LSMinimumSystemVersion raw "$resources/Info.plist")" \
+  deployment_target="$(plutil -extract LSMinimumSystemVersion raw "$sources/Info.plist")"
+  executable="$(MACOSX_DEPLOYMENT_TARGET="$deployment_target" \
     cargo build --release -p "$package" --message-format json-render-diagnostics \
     | jq -r --arg package "$package" 'select(.reason == "compiler-artifact" and .target.name == $package) | .executable // empty')"
+  if [[ -z "$executable" ]]; then
+    echo "error: cargo built no $package executable" >&2
+    exit 1
+  fi
   app="$target/$bundle"
   iconset="$target/AppIcon.iconset"
   installed="$HOME/Applications/$bundle"
@@ -34,13 +39,13 @@ install-app:
   rm -rf "$app" "$iconset"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$iconset"
   install -m 755 "$executable" "$app/Contents/MacOS/"
-  cp "$resources/Info.plist" "$plist"
+  cp "$sources/Info.plist" "$plist"
   plutil -insert CFBundleShortVersionString -string "$version" "$plist"
   plutil -insert CFBundleVersion -string "$version" "$plist"
-  cp "$resources/Credits.rtf" "$app/Contents/Resources/"
+  cp "$sources/Credits.rtf" "$app/Contents/Resources/"
   for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$resources/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" "$resources/icon.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$size" "$size" "$sources/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" "$sources/icon.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
   done
   iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
   codesign --force --sign - "$app"
