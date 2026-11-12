@@ -12,7 +12,7 @@ const SUBSTITUTE_DAY_NOTE: &str = "Substitute day";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BankHoliday {
     pub date: NaiveDate,
-    /// gov.uk's name, ending " (substitute day)" on a substitute day.
+    /// Ends " (substitute day)" on a substitute day.
     pub name: String,
     pub predicted: bool,
 }
@@ -49,14 +49,12 @@ pub struct Holidays {
     divisions: HashMap<Division, BTreeMap<i32, Vec<BankHoliday>>>,
 }
 
-/// How many years past the later of the published data's last year and the current year
-/// predictions run.
+/// Years predicted past the later of the published data's last year and the current year.
 const PREDICTED_YEARS_AHEAD: i32 = 2;
 
 /// Merges the snapshot with the cache: the cache's copy of a year wins and the snapshot fills the
-/// years it lacks. A cache fetched before the snapshot was captured is ignored. Each division then
-/// gets predicted bank holidays from the year after its own last published year, through a last
-/// year shared by every division.
+/// years it lacks. A cache fetched before the snapshot was captured is ignored. Each division is
+/// then predicted from the year after its own last, through a last year shared by all.
 #[must_use]
 pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>, current_year: i32) -> Holidays {
     let cache = cache.filter(|cache| cache.as_of >= snapshot.as_of);
