@@ -9,7 +9,8 @@ Early days: the workspace is scaffolded, and the app itself is still to come. It
 - `bank-holidays-cli` (`crates/cli`): the command-line tool
 - `bank-holidays-app` (`crates/app`): the macOS app, on gpui-kit
 
-`cargo run -p bank-holidays-app` opens the app. It needs macOS 15 or newer.
+`cargo run -p bank-holidays-app` opens the app. It needs macOS 15 or newer. `just install-app` builds
+`Bank Holidays.app`, signs it ad hoc and installs it in `~/Applications`; it needs `jq`.
 
 ## Development
 
@@ -19,6 +20,7 @@ Needs Rust 1.99 or newer and [`just`](https://just.systems).
 just test          # run the test suite
 just lint          # clippy, warnings as errors
 just format        # rustfmt
+just install-app   # build and install Bank Holidays.app
 just tools         # install a pre-commit hook running format-check and lint
 ```
 
