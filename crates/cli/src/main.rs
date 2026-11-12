@@ -223,7 +223,9 @@ mod tests {
 
     /// Bank holidays for 2025 and 2026, with Northern Ireland's own two in 2025.
     fn fixture() -> Holidays {
-        let event = |date: &str, title: &str| serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true});
+        fn event(date: &str, title: &str) -> serde_json::Value {
+            serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
+        }
         let shared = [
             event("2025-12-25", "Christmas Day"),
             event("2025-12-26", "Boxing Day"),
@@ -350,7 +352,7 @@ mod tests {
             &["later"],
         ] {
             let outcome = run_on("2025-01-01", args);
-            assert_eq!(outcome.code, 2, "{args:?}");
+            assert_eq!(outcome.code, USAGE_ERROR, "{args:?}");
             assert!(outcome.stdout.is_empty(), "{args:?}");
             assert!(outcome.stderr.starts_with("bank-holidays: "), "{args:?}");
         }
@@ -378,7 +380,7 @@ mod tests {
     #[test]
     fn a_day_after_the_last_bank_holiday_in_the_data_is_a_runtime_failure() {
         let outcome = run_on("2026-12-29", &[]);
-        assert_eq!(outcome.code, 1);
+        assert_eq!(outcome.code, RUNTIME_FAILURE);
         assert!(outcome.stderr.starts_with("bank-holidays: "));
     }
 }

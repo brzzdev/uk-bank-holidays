@@ -9,14 +9,14 @@ const FEED: &[u8] = include_bytes!("../data/bank-holidays.json");
 ///
 /// # Panics
 ///
-/// If the committed snapshot doesn't parse, which its test rules out.
+/// Never: the committed feed and capture date always parse.
 #[must_use]
 pub fn snapshot() -> DatedFeed {
     DatedFeed {
         as_of: CAPTURED
             .trim()
             .parse::<NaiveDate>()
-            .expect("the snapshot test parses the committed capture date"),
-        feed: Feed::parse(FEED).expect("the snapshot test parses the committed feed"),
+            .expect("the committed capture date always parses"),
+        feed: Feed::parse(FEED).expect("the committed feed always parses"),
     }
 }

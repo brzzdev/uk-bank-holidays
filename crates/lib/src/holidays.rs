@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 
 use chrono::{Datelike, NaiveDate};
 
-use crate::{DatedFeed, Division};
+use crate::{DatedFeed, Division, Feed};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BankHoliday {
@@ -32,9 +32,9 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
     let divisions = Division::ALL
         .into_iter()
         .map(|division| {
-            let mut years = by_year(snapshot, division);
+            let mut years = by_year(&snapshot.feed, division);
             if let Some(cache) = cache {
-                years.extend(by_year(cache, division));
+                years.extend(by_year(&cache.feed, division));
             }
             (division, years)
         })
@@ -42,9 +42,9 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
     Holidays { divisions }
 }
 
-fn by_year(feed: &DatedFeed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
+fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
     let mut years: BTreeMap<i32, Vec<BankHoliday>> = BTreeMap::new();
-    for event in feed.feed.events(division) {
+    for event in feed.events(division) {
         years
             .entry(event.date.year())
             .or_default()
@@ -100,7 +100,6 @@ impl Holidays {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Feed;
 
     fn date(s: &str) -> NaiveDate {
         s.parse().expect("test dates are valid")
@@ -163,6 +162,14 @@ mod tests {
                 (date("2026-12-28"), "Boxing Day")
             ],
         );
+    }
+
+    #[test]
+    fn a_cache_fetched_on_the_day_the_snapshot_was_captured_is_used() {
+        let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
+        let cache = dated_feed("2025-06-01", &[("2026-12-28", "Boxing Day")]);
+        let holidays = merge(&snapshot, Some(&cache));
+        assert_eq!(names(&holidays, 2026), [(date("2026-12-28"), "Boxing Day")]);
     }
 
     #[test]
