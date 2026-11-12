@@ -57,6 +57,23 @@ install-app:
 lint:
   cargo clippy --all-targets -- -D warnings
 
+# Refresh the gov.uk feed snapshot built into the library, and its capture date.
+snapshot:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  data=crates/lib/data
+  download="$(mktemp "$data/bank-holidays.json.XXXXXX")"
+  trap 'rm -f "$download"' EXIT
+  curl --fail --silent --show-error --max-time 30 --output "$download" https://www.gov.uk/bank-holidays.json
+  if ! jq -e '[."england-and-wales", ."northern-ireland", .scotland] | all(.events | length > 0)' "$download" >/dev/null; then
+    echo "error: the downloaded feed is missing a division or has one with no events" >&2
+    exit 1
+  fi
+  chmod 644 "$download"
+  mv "$download" "$data/bank-holidays.json"
+  date -u +%F > "$data/captured"
+  echo "Snapshot captured $(cat "$data/captured")."
+
 # Run the test suite.
 test:
   cargo test
