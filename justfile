@@ -65,10 +65,7 @@ snapshot:
   download="$(mktemp "$data/bank-holidays.json.XXXXXX")"
   trap 'rm -f "$download"' EXIT
   curl --fail --silent --show-error --max-time 30 --output "$download" https://www.gov.uk/bank-holidays.json
-  if ! jq -e '[."england-and-wales", ."northern-ireland", .scotland] | all(.events | length > 0)' "$download" >/dev/null; then
-    echo "error: the downloaded feed is missing a division or has one with no events" >&2
-    exit 1
-  fi
+  cargo run --quiet --package bank-holidays --example check_feed -- "$download"
   chmod 644 "$download"
   mv "$download" "$data/bank-holidays.json"
   date -u +%F > "$data/captured"

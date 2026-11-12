@@ -3,10 +3,14 @@ use serde::Deserialize;
 
 use crate::{Division, Error};
 
-/// The gov.uk bank holidays feed, `https://www.gov.uk/bank-holidays.json`.
+/// The gov.uk bank holidays feed, `https://www.gov.uk/bank-holidays.json`, built only by
+/// [`Feed::parse`].
+#[derive(Debug)]
+pub struct Feed(Divisions);
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Feed {
+struct Divisions {
     england_and_wales: DivisionFeed,
     northern_ireland: DivisionFeed,
     scotland: DivisionFeed,
@@ -29,7 +33,7 @@ pub struct Event {
 impl Feed {
     /// Parses a feed, rejecting one with a division that has no events.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let feed: Self = serde_json::from_slice(bytes).map_err(Error::Feed)?;
+        let feed = Self(serde_json::from_slice(bytes).map_err(Error::Feed)?);
         let empty = Division::ALL
             .into_iter()
             .find(|&division| feed.events(division).is_empty());
@@ -41,10 +45,11 @@ impl Feed {
 
     #[must_use]
     pub fn events(&self, division: Division) -> &[Event] {
+        let divisions = &self.0;
         let feed = match division {
-            Division::EnglandAndWales => &self.england_and_wales,
-            Division::NorthernIreland => &self.northern_ireland,
-            Division::Scotland => &self.scotland,
+            Division::EnglandAndWales => &divisions.england_and_wales,
+            Division::NorthernIreland => &divisions.northern_ireland,
+            Division::Scotland => &divisions.scotland,
         };
         &feed.events
     }

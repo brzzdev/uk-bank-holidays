@@ -18,7 +18,7 @@ impl fmt::Display for Error {
             Self::Feed(error) => write!(f, "couldn't read the feed: {error}"),
             Self::UnknownDivision(division) => write!(
                 f,
-                "unknown division '{division}' (expected england-and-wales, scotland, northern-ireland, ew or ni)"
+                "unknown division '{division}' (expected england-and-wales, scotland, northern-ireland, ew, or ni)"
             ),
         }
     }

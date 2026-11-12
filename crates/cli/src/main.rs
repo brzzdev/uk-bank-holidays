@@ -85,11 +85,13 @@ fn main() -> ExitCode {
         &merge(&snapshot(), None),
     );
     let mut code = outcome.code;
+    let mut stderr = outcome.stderr;
     if let Err(error) = io::stdout().lock().write_all(outcome.stdout.as_bytes()) {
-        eprintln!("{NAME}: couldn't write to stdout: {error}");
+        stderr = format!("{NAME}: couldn't write to stdout: {error}\n{stderr}");
         code = RUNTIME_FAILURE;
     }
-    eprint!("{}", outcome.stderr);
+    // A failed write to stderr leaves nowhere to report it, and the exit code already says why.
+    let _ = io::stderr().lock().write_all(stderr.as_bytes());
     ExitCode::from(code)
 }
 
@@ -119,7 +121,7 @@ fn run(
                 );
             };
             Outcome::success(match options.format {
-                Format::Json => json(
+                Format::Json => pretty(
                     &year_holidays
                         .iter()
                         .map(|holiday| to_json(holiday, division))
@@ -146,7 +148,7 @@ fn run(
                 );
             };
             Outcome::success(match options.format {
-                Format::Json => json(&to_json(next.holiday, division)),
+                Format::Json => pretty(&to_json(next.holiday, division)),
                 Format::Text => {
                     let countdown = match next.days {
                         0 => "today".to_owned(),
@@ -207,7 +209,7 @@ fn to_json(holiday: &BankHoliday, division: Division) -> serde_json::Value {
     })
 }
 
-fn json(value: &serde_json::Value) -> String {
+fn pretty(value: &serde_json::Value) -> String {
     let mut json = serde_json::to_string_pretty(value).expect("JSON values always serialise");
     json.push('\n');
     json
@@ -217,9 +219,36 @@ fn json(value: &serde_json::Value) -> String {
 mod tests {
     use super::*;
 
+    use bank_holidays::{DatedFeed, Feed};
+
+    /// Bank holidays for 2025 and 2026, with Northern Ireland's own two in 2025.
+    fn fixture() -> Holidays {
+        let event = |date: &str, title: &str| serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true});
+        let shared = [
+            event("2025-12-25", "Christmas Day"),
+            event("2025-12-26", "Boxing Day"),
+            event("2026-01-01", "New Year’s Day"),
+            event("2026-12-25", "Christmas Day"),
+            event("2026-12-28", "Boxing Day"),
+        ];
+        let mut northern_ireland = vec![
+            event("2025-03-17", "St Patrick’s Day"),
+            event("2025-07-14", "Battle of the Boyne (Orangemen’s Day)"),
+        ];
+        northern_ireland.extend(shared.clone());
+        let json = serde_json::json!({
+            "england-and-wales": {"events": shared},
+            "northern-ireland": {"events": northern_ireland},
+            "scotland": {"events": shared},
+        });
+        let feed = Feed::parse(json.to_string().as_bytes()).expect("the fixture is a valid feed");
+        let as_of = "2025-01-01".parse().expect("the fixture date is valid");
+        merge(&DatedFeed { as_of, feed }, None)
+    }
+
     fn run_on(today: &str, args: &[&str]) -> Outcome {
         let today = today.parse::<NaiveDate>().expect("test dates are valid");
-        run(args.iter().copied(), today, &merge(&snapshot(), None))
+        run(args.iter().copied(), today, &fixture())
     }
 
     fn parsed(outcome: &Outcome) -> serde_json::Value {
@@ -246,14 +275,15 @@ mod tests {
     }
 
     #[test]
-    fn northern_ireland_2025_lists_st_patricks_day_and_the_boyne_substitute_day() {
+    fn northern_ireland_lists_its_own_bank_holidays_with_their_gov_uk_names() {
         let outcome = run_on("2025-01-01", &["-d", "ni", "list", "2025"]);
         assert_eq!(outcome.code, 0);
-        assert!(outcome.stdout.contains("Mon 17 Mar  St Patrick’s Day\n"));
-        assert!(
-            outcome
-                .stdout
-                .contains("Mon 14 Jul  Battle of the Boyne (Orangemen’s Day)\n")
+        assert_eq!(
+            outcome.stdout,
+            "Mon 17 Mar  St Patrick’s Day\n\
+             Mon 14 Jul  Battle of the Boyne (Orangemen’s Day)\n\
+             Thu 25 Dec  Christmas Day\n\
+             Fri 26 Dec  Boxing Day\n",
         );
     }
 
@@ -274,9 +304,9 @@ mod tests {
         assert_eq!(
             *first,
             serde_json::json!({
-                "date": "2025-01-01",
+                "date": "2025-03-17",
                 "division": "northern-ireland",
-                "name": "New Year’s Day",
+                "name": "St Patrick’s Day",
             }),
         );
     }
@@ -306,13 +336,13 @@ mod tests {
             (
                 2,
                 "",
-                "bank-holidays: no bank holidays for 1999 (have 2019–2028)\n"
+                "bank-holidays: no bank holidays for 1999 (have 2025–2026)\n"
             ),
         );
     }
 
     #[test]
-    fn an_unknown_division_or_flag_is_a_usage_error() {
+    fn an_unknown_division_flag_command_or_year_is_a_usage_error() {
         for args in [
             &["-d", "wales"][..],
             &["--bogus"],
@@ -347,7 +377,7 @@ mod tests {
 
     #[test]
     fn a_day_after_the_last_bank_holiday_in_the_data_is_a_runtime_failure() {
-        let outcome = run_on("2029-01-01", &[]);
+        let outcome = run_on("2026-12-29", &[]);
         assert_eq!(outcome.code, 1);
         assert!(outcome.stderr.starts_with("bank-holidays: "));
     }
