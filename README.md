@@ -13,12 +13,13 @@ Early days: the workspace is scaffolded, and the app itself is still to come. It
 
 ## Development
 
-Needs Rust 1.99 or newer and [`just`](https://just.systems).
+Needs Rust 1.100 or newer, [`just`](https://just.systems), and, for `just install-app`, `jq`.
 
 ```sh
 just test          # run the test suite
 just lint          # clippy, warnings as errors
 just format        # rustfmt
+just install-app   # build Bank Holidays.app and install it in ~/Applications
 just tools         # install a pre-commit hook running format-check and lint
 ```
 
