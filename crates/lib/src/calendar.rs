@@ -2,12 +2,15 @@ use std::collections::BTreeMap;
 
 use chrono::{Datelike, NaiveDate, Weekday};
 
+use crate::predict::predict;
 use crate::{BankHoliday, Division, Holidays};
 
 /// The most working days a bridge books.
 const MAX_DAYS_BOOKED: usize = 8;
 /// The fewest days off in a four-day weekend.
 const MIN_FOUR_DAY_WEEKEND_DAYS: usize = 4;
+/// The fewest bank holidays in a four-day weekend.
+const MIN_FOUR_DAY_WEEKEND_HOLIDAYS: usize = 2;
 
 /// A run of consecutive days, both ends included.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17,8 +20,7 @@ pub struct Span {
 }
 
 impl Span {
-    #[must_use]
-    pub fn contains(self, day: NaiveDate) -> bool {
+    pub(crate) fn contains(self, day: NaiveDate) -> bool {
         (self.first..=self.last).contains(&day)
     }
 
@@ -27,7 +29,7 @@ impl Span {
         self.days().count()
     }
 
-    pub fn days(self) -> impl Iterator<Item = NaiveDate> {
+    pub(crate) fn days(self) -> impl Iterator<Item = NaiveDate> {
         self.first
             .iter_days()
             .take_while(move |&day| day <= self.last)
@@ -43,7 +45,6 @@ pub struct Bridge {
     pub predicted: bool,
 }
 
-/// What a day is, for marking it on a calendar.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Day {
     BankHoliday,
@@ -74,6 +75,7 @@ struct Stretch<'a> {
 pub struct Calendar<'a> {
     /// Keyed by the last bank holiday before the bridge.
     bridges: BTreeMap<NaiveDate, Bridge>,
+    division: Division,
     four_day_weekends: Vec<Span>,
     holidays: BTreeMap<NaiveDate, &'a BankHoliday>,
 }
@@ -81,20 +83,34 @@ pub struct Calendar<'a> {
 impl<'a> Calendar<'a> {
     #[must_use]
     pub fn new(holidays: &'a Holidays, division: Division) -> Self {
+        let following_year = predict(holidays.years(division).end() + 1, division);
         let holidays: BTreeMap<_, _> = holidays
             .years_of(division)
             .values()
             .flatten()
             .map(|holiday| (holiday.date, holiday))
             .collect();
-        let stretches = stretches(&holidays);
+        // The year after the last is predicted so the last year's bridges have an end.
+        let through_following_year: BTreeMap<_, _> = holidays
+            .iter()
+            .map(|(&date, &holiday)| (date, holiday))
+            .chain(following_year.iter().map(|holiday| (holiday.date, holiday)))
+            .collect();
+        let stretches = stretches(&through_following_year);
+        let known = |stretch: &Stretch| {
+            stretch
+                .holidays
+                .iter()
+                .any(|holiday| holidays.contains_key(&holiday.date))
+        };
         let four_day_weekends = stretches
             .iter()
-            .filter(|stretch| stretch.is_four_day_weekend())
+            .filter(|stretch| known(stretch) && stretch.is_four_day_weekend())
             .map(|stretch| stretch.span)
             .collect();
         let bridges = stretches
             .array_windows()
+            .filter(|[before, _]| known(before))
             .filter_map(|[before, after]| {
                 let booked = Span {
                     first: before.span.last.succ_opt()?,
@@ -122,6 +138,7 @@ impl<'a> Calendar<'a> {
             .collect();
         Self {
             bridges,
+            division,
             four_day_weekends,
             holidays,
         }
@@ -133,17 +150,15 @@ impl<'a> Calendar<'a> {
         if is_weekend(date) {
             return None;
         }
-        self.bridges().find(|bridge| bridge.booked.contains(date))
+        self.bridges
+            .values()
+            .find(|bridge| bridge.booked.contains(date))
     }
 
     /// The bridge that follows a bank holiday, when it's the last bank holiday before one.
     #[must_use]
     pub fn bridge_after(&self, holiday: NaiveDate) -> Option<&Bridge> {
         self.bridges.get(&holiday)
-    }
-
-    fn bridges(&self) -> impl Iterator<Item = &Bridge> {
-        self.bridges.values()
     }
 
     #[must_use]
@@ -162,6 +177,11 @@ impl<'a> Calendar<'a> {
             return Day::Bridge;
         }
         Day::Ordinary
+    }
+
+    #[must_use]
+    pub fn division(&self) -> Division {
+        self.division
     }
 
     /// The four-day weekend a day is part of.
@@ -196,7 +216,7 @@ impl<'a> Calendar<'a> {
 
 impl Stretch<'_> {
     fn is_four_day_weekend(&self) -> bool {
-        self.holidays.len() >= 2
+        self.holidays.len() >= MIN_FOUR_DAY_WEEKEND_HOLIDAYS
             && self.span.day_count() >= MIN_FOUR_DAY_WEEKEND_DAYS
             && self.span.days().any(is_weekend)
     }
@@ -294,8 +314,8 @@ mod tests {
 
     fn bridges(holidays: &Holidays, division: Division) -> Vec<Bridge> {
         Calendar::new(holidays, division)
-            .bridges()
-            .cloned()
+            .bridges
+            .into_values()
             .collect()
     }
 
@@ -401,8 +421,7 @@ mod tests {
     fn a_bridge_to_a_predicted_bank_holiday_is_predicted() {
         let holidays = holidays(&["2025-12-25", "2025-12-26"]).with_predictions(2025);
         let bridge = Calendar::new(&holidays, Division::EnglandAndWales)
-            .bridges()
-            .find(|bridge| bridge.booked.first == date("2025-12-29"))
+            .bridge_after(date("2025-12-26"))
             .cloned();
         assert_eq!(bridge.map(|bridge| bridge.predicted), Some(true));
     }
@@ -571,5 +590,23 @@ mod tests {
         assert!(starts("2022-12-26"));
         assert!(!starts("2022-12-27"));
         assert!(!starts("2025-07-14"));
+    }
+
+    #[test]
+    fn the_last_year_is_bridged_into_the_predicted_year_after_it() {
+        let holidays = holidays(&["2025-12-25", "2025-12-26"]);
+        let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
+        assert_eq!(
+            calendar.bridge_after(date("2025-12-26")).cloned(),
+            Some(Bridge {
+                predicted: true,
+                ..bridge(
+                    ("2025-12-29", "2025-12-31"),
+                    3,
+                    ("2025-12-25", "2026-01-01")
+                )
+            }),
+        );
+        assert_eq!(calendar.next(date("2025-12-27")), None);
     }
 }

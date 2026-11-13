@@ -133,7 +133,7 @@ fn run(
                 Format::Json => pretty(
                     &year_holidays
                         .iter()
-                        .map(|holiday| to_json(holiday, division, &calendar))
+                        .map(|holiday| to_json(holiday, &calendar))
                         .collect(),
                 ),
                 Format::Text => year_holidays
@@ -165,7 +165,7 @@ fn run(
                 );
             };
             Outcome::success(match options.format {
-                Format::Json => pretty(&to_json(next.holiday, division, &calendar)),
+                Format::Json => pretty(&to_json(next.holiday, &calendar)),
                 Format::Text => {
                     let countdown = match next.days {
                         0 => "today".to_owned(),
@@ -259,10 +259,10 @@ fn span_text(span: Span) -> String {
     }
 }
 
-fn to_json(holiday: &BankHoliday, division: Division, calendar: &Calendar) -> serde_json::Value {
+fn to_json(holiday: &BankHoliday, calendar: &Calendar) -> serde_json::Value {
     let mut json = serde_json::json!({
         "date": holiday.date,
-        "division": division.key(),
+        "division": calendar.division().key(),
         "four_day_weekend": calendar.four_day_weekend(holiday.date).is_some(),
         "name": holiday.name,
         "predicted": holiday.predicted,
