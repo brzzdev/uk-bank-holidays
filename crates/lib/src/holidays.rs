@@ -109,8 +109,7 @@ pub(crate) fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<Bank
 }
 
 impl Holidays {
-    /// Adds predicted bank holidays to each division from the year after its own last published year, through a
-    /// last year shared by all.
+    /// Predicts each division from after its own last published year to a last year shared by all.
     #[must_use]
     pub fn with_predictions(mut self, current_year: i32) -> Self {
         let last_predicted = self
