@@ -1,6 +1,10 @@
 use bank_holidays::Calendar;
 use chrono::{Datelike as _, Days, Months, NaiveDate, Weekday};
-use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, ThemeColor, h_flex, v_flex};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::{
+    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, ThemeColor, h_flex,
+    v_flex,
+};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, Background, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
@@ -9,7 +13,7 @@ use gpui_kit::{
 
 use crate::detail::detail;
 use crate::selection::Move;
-use crate::{BankHolidays, first_of_month};
+use crate::{BankHolidays, Today, first_of_month};
 
 /// The bridge's hatch lines, as an opacity of `warning`.
 const BRIDGE_HATCH: f32 = 0.35;
@@ -101,6 +105,13 @@ impl BankHolidays {
             calendar,
             cx,
         );
+        let today_button = Button::new("today")
+            .ghost()
+            .small()
+            .tab_stop(false)
+            .label("Today")
+            .disabled(!self.can_go_today(calendar, today))
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(Today), cx));
         let theme = cx.theme();
         v_flex()
             .flex_1()
@@ -111,20 +122,21 @@ impl BankHolidays {
             .py_4()
             .child(
                 h_flex()
+                    .flex_wrap()
                     .justify_between()
                     .gap_2()
                     .child(
                         h_flex()
                             .gap_1()
-                            .child(previous)
                             .child(
                                 div()
                                     .min_w(px(MONTH_TITLE_WIDTH))
-                                    .text_center()
                                     .text_lg()
                                     .font_semibold()
                                     .child(month.format("%B %Y").to_string()),
                             )
+                            .child(previous)
+                            .child(today_button)
                             .child(next),
                     )
                     .child(legend(cx)),
