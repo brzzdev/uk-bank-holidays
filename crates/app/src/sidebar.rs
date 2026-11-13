@@ -7,8 +7,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, div, px,
 };
 
-use crate::BankHolidays;
-use crate::detail::FULL_DATE;
+use crate::{BankHolidays, FULL_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
@@ -25,8 +24,12 @@ enum Dot {
 }
 
 impl BankHolidays {
-    pub(crate) fn sidebar(&self, today: NaiveDate, cx: &mut Context<Self>) -> impl IntoElement {
-        let calendar = Calendar::new(&self.holidays, self.division);
+    pub(crate) fn sidebar(
+        &self,
+        calendar: &Calendar,
+        today: NaiveDate,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let holidays = self
             .holidays
             .year(self.division, self.month.year())
@@ -48,13 +51,9 @@ impl BankHolidays {
                     .p_1p5()
                     .gap_px()
                     .children(holidays.iter().enumerate().map(|(index, holiday)| {
-                        let date = holiday.date;
-                        row(holiday, dot(&calendar, holiday), today, cx)
+                        row(holiday, dot(calendar, holiday), today, cx)
                             .id(("holiday", index))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.select(date);
-                                cx.notify();
-                            }))
+                            .on_click(Self::select_on_click(holiday.date, cx))
                     }))
                     .overflow_y_scrollbar(),
             )

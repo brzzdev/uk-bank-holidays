@@ -1,14 +1,14 @@
-use bank_holidays::{Calendar, Day};
-use chrono::{Datelike as _, Days, Months, NaiveDate};
+use bank_holidays::Calendar;
+use chrono::{Datelike as _, Days, Months, NaiveDate, Weekday};
 use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, ThemeColor, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, Stateful,
-    StatefulInteractiveElement as _, Styled, div, pattern_slash, px,
+    App, Background, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    Stateful, StatefulInteractiveElement as _, Styled, div, pattern_slash, px,
 };
 
-use crate::BankHolidays;
 use crate::detail::detail;
+use crate::{BankHolidays, first_of_month};
 
 /// The red behind a four-day weekend's days, as an opacity of `red`.
 const FOUR_DAY_WEEKEND_TINT: f32 = 0.12;
@@ -55,8 +55,12 @@ struct Look {
 }
 
 impl BankHolidays {
-    pub(crate) fn month_pane(&self, today: NaiveDate, cx: &mut Context<Self>) -> impl IntoElement {
-        let calendar = Calendar::new(&self.holidays, self.division);
+    pub(crate) fn month_pane(
+        &self,
+        calendar: &Calendar,
+        today: NaiveDate,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let days: Vec<_> = month_days(self.month).collect();
         let weeks: Vec<_> = days
             .chunks(WEEKDAYS.len())
@@ -66,23 +70,18 @@ impl BankHolidays {
                     .gap_1()
                     .children(days.iter().enumerate().map(|(weekday, &date)| {
                         let look = Look {
-                            area: area(&calendar, date),
-                            disc: disc(&calendar, date),
-                            overflow: (date.year(), date.month())
-                                != (self.month.year(), self.month.month()),
+                            area: area(calendar, date),
+                            disc: disc(calendar, date),
+                            overflow: first_of_month(date) != self.month,
                             selected: date == self.selected,
                             today: date == today,
                         };
-                        cell(week * WEEKDAYS.len() + weekday, date, &look, cx).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                this.select(date);
-                                cx.notify();
-                            }),
-                        )
+                        cell(week * WEEKDAYS.len() + weekday, date, &look, cx)
+                            .on_click(Self::select_on_click(date, cx))
                     }))
             })
             .collect();
-        let detail = detail(&calendar, self.selected, today);
+        let detail = detail(calendar, self.selected, today);
         let previous = self.step_button("previous-month", IconName::ChevronLeft, -1, cx);
         let next = self.step_button("next-month", IconName::ChevronRight, 1, cx);
         let theme = cx.theme();
@@ -140,12 +139,11 @@ impl BankHolidays {
     }
 }
 
-/// Every day of the Monday-first weeks that hold a month's days.
-fn month_days(month: NaiveDate) -> impl Iterator<Item = NaiveDate> {
-    let first = month.with_day(1).expect("every month has a first day");
+/// Every day of the Monday-first weeks that hold the month starting on `first`.
+fn month_days(first: NaiveDate) -> impl Iterator<Item = NaiveDate> {
     let last = first + Months::new(1) - Days::new(1);
-    let start = first - Days::new(first.weekday().num_days_from_monday().into());
-    let end = last + Days::new((6 - last.weekday().num_days_from_monday()).into());
+    let start = first.week(Weekday::Mon).first_day();
+    let end = last.week(Weekday::Mon).last_day();
     start.iter_days().take_while(move |&day| day <= end)
 }
 
@@ -153,15 +151,17 @@ fn area(calendar: &Calendar, date: NaiveDate) -> Option<Area> {
     if calendar.four_day_weekend(date).is_some() {
         return Some(Area::FourDayWeekend);
     }
-    (calendar.day(date) == Day::Bridge).then_some(Area::Bridge)
+    calendar.bridge_booked_on(date).map(|_| Area::Bridge)
 }
 
 fn disc(calendar: &Calendar, date: NaiveDate) -> Option<Disc> {
-    match calendar.day(date) {
-        Day::BankHoliday => Some(Disc::Filled),
-        Day::PredictedBankHoliday => Some(Disc::Dashed),
-        Day::Bridge | Day::FourDayWeekend | Day::Ordinary => None,
-    }
+    calendar.holiday(date).map(|holiday| {
+        if holiday.predicted {
+            Disc::Dashed
+        } else {
+            Disc::Filled
+        }
+    })
 }
 
 fn area_tint(theme: &ThemeColor, area: Area) -> Hsla {
@@ -184,6 +184,14 @@ fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hs
 
 fn bridge_hatch(theme: &ThemeColor) -> Hsla {
     theme.warning.opacity(BRIDGE_HATCH)
+}
+
+fn bridge_pattern(theme: &ThemeColor) -> Background {
+    pattern_slash(
+        bridge_hatch(theme),
+        BRIDGE_HATCH_WIDTH,
+        BRIDGE_HATCH_INTERVAL,
+    )
 }
 
 fn disc_fill(theme: &ThemeColor, overflow: bool) -> Hsla {
@@ -240,11 +248,7 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .justify_center()
         .rounded(px(CELL_RADIUS))
         .when(look.area == Some(Area::Bridge), |shading| {
-            shading.bg(pattern_slash(
-                bridge_hatch(theme),
-                BRIDGE_HATCH_WIDTH,
-                BRIDGE_HATCH_INTERVAL,
-            ))
+            shading.bg(bridge_pattern(theme))
         })
         .child(ring);
     div()
@@ -253,14 +257,8 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .h(px(CELL_HEIGHT))
         .rounded(px(CELL_RADIUS))
         .text_sm()
-        .when(look.selected, |cell| cell.bg(theme.accent))
-        .child(
-            div()
-                .size_full()
-                .rounded(px(CELL_RADIUS))
-                .when_some(look.area, |tint, area| tint.bg(area_tint(theme, area)))
-                .child(shading),
-        )
+        .bg(cell_background(theme, look.selected, look.area))
+        .child(shading)
 }
 
 fn legend(cx: &App) -> Div {
@@ -290,11 +288,7 @@ fn legend(cx: &App) -> Div {
             swatch()
                 .rounded_sm()
                 .bg(area_tint(theme, Area::Bridge))
-                .child(div().size_full().bg(pattern_slash(
-                    bridge_hatch(theme),
-                    BRIDGE_HATCH_WIDTH,
-                    BRIDGE_HATCH_INTERVAL,
-                ))),
+                .child(div().size_full().bg(bridge_pattern(theme))),
             "Bridge",
         ))
 }
@@ -317,7 +311,7 @@ mod tests {
 
     #[test]
     fn a_month_fills_its_first_and_last_weeks_from_the_months_either_side() {
-        let december: Vec<_> = month_days(date("2025-12-17")).collect();
+        let december: Vec<_> = month_days(date("2025-12-01")).collect();
         assert_eq!(
             (december.first(), december.last(), december.len()),
             (Some(&date("2025-12-01")), Some(&date("2026-01-04")), 35),
@@ -348,77 +342,67 @@ mod tests {
 
     #[test]
     fn every_mark_meets_wcag_contrast_in_light_and_dark() {
+        let looks = [false, true].into_iter().flat_map(|selected| {
+            [None, Some(Area::Bridge), Some(Area::FourDayWeekend)]
+                .into_iter()
+                .flat_map(move |area| {
+                    [None, Some(Disc::Dashed), Some(Disc::Filled)]
+                        .into_iter()
+                        .flat_map(move |disc| {
+                            [false, true].map(move |overflow| (selected, area, disc, overflow))
+                        })
+                })
+        });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
-            let mut check = |what: String, a: Hsla, b: Hsla, minimum: f32| {
-                let ratio = contrast(a, b);
-                if ratio < minimum {
-                    failures.push(format!(
-                        "{appearance}: {what} is {ratio:.2}, under {minimum}"
-                    ));
-                }
-            };
-            for selected in [false, true] {
+            for (selected, area, disc, overflow) in looks.clone() {
                 // A bridge books working days, so it never holds a bank holiday's disc.
-                for (area, discs) in [
-                    (None, &[None, Some(Disc::Dashed), Some(Disc::Filled)][..]),
+                if area == Some(Area::Bridge) && disc.is_some() {
+                    continue;
+                }
+                let behind = cell_background(&theme, selected, area);
+                let fill = behind.blend(disc_fill(&theme, overflow));
+                let numeral_behind = if disc == Some(Disc::Filled) {
+                    fill
+                } else {
+                    behind
+                };
+                let text_minimum = if overflow {
+                    GRAPHIC_CONTRAST
+                } else {
+                    TEXT_CONTRAST
+                };
+                let mut checks = vec![
+                    ("today's ring", theme.foreground, behind, GRAPHIC_CONTRAST),
                     (
-                        Some(Area::FourDayWeekend),
-                        &[None, Some(Disc::Dashed), Some(Disc::Filled)],
+                        "numeral",
+                        numeral_colour(&theme, disc, overflow),
+                        numeral_behind,
+                        text_minimum,
                     ),
-                    (Some(Area::Bridge), &[None]),
-                ] {
-                    let on = format!("{area:?} cell{}", if selected { ", selected" } else { "" });
-                    let behind = cell_background(&theme, selected, area);
-                    let mut ring_behinds = vec![behind];
-                    if area == Some(Area::Bridge) {
-                        ring_behinds.push(behind.blend(bridge_hatch(&theme)));
+                ];
+                match (area, disc) {
+                    (Some(Area::Bridge), _) => checks.push((
+                        "today's ring on hatching",
+                        theme.foreground,
+                        behind.blend(bridge_hatch(&theme)),
+                        GRAPHIC_CONTRAST,
+                    )),
+                    (_, Some(Disc::Dashed)) => {
+                        checks.push(("outline", theme.red, behind, GRAPHIC_CONTRAST));
                     }
-                    for ring_behind in ring_behinds {
-                        check(
-                            format!("today's ring on {on}"),
-                            theme.foreground,
-                            ring_behind,
-                            GRAPHIC_CONTRAST,
-                        );
+                    (_, Some(Disc::Filled)) => {
+                        checks.push(("fill", fill, behind, GRAPHIC_CONTRAST));
                     }
-                    for overflow in [false, true] {
-                        let text_minimum = if overflow {
-                            GRAPHIC_CONTRAST
-                        } else {
-                            TEXT_CONTRAST
-                        };
-                        for &disc in discs {
-                            let what = format!("{disc:?} disc, overflow {overflow}, on {on}");
-                            let numeral_behind = match disc {
-                                None => behind,
-                                Some(Disc::Dashed) => {
-                                    check(
-                                        format!("outline of {what}"),
-                                        theme.red,
-                                        behind,
-                                        GRAPHIC_CONTRAST,
-                                    );
-                                    behind
-                                }
-                                Some(Disc::Filled) => {
-                                    let fill = behind.blend(disc_fill(&theme, overflow));
-                                    check(
-                                        format!("fill of {what}"),
-                                        fill,
-                                        behind,
-                                        GRAPHIC_CONTRAST,
-                                    );
-                                    fill
-                                }
-                            };
-                            check(
-                                format!("numeral of {what}"),
-                                numeral_colour(&theme, disc, overflow),
-                                numeral_behind,
-                                text_minimum,
-                            );
-                        }
+                    (_, None) => {}
+                }
+                for (mark, colour, behind, minimum) in checks {
+                    let ratio = contrast(colour, behind);
+                    if ratio < minimum {
+                        failures.push(format!(
+                            "{appearance}: {mark} of {disc:?} disc on {area:?} cell, selected \
+                             {selected}, overflow {overflow}, is {ratio:.2}, under {minimum}"
+                        ));
                     }
                 }
             }

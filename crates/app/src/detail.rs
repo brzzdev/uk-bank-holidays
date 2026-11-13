@@ -1,8 +1,7 @@
-use bank_holidays::{Bridge, Calendar};
+use bank_holidays::Calendar;
 use chrono::{Datelike as _, NaiveDate};
 
-/// "Thursday 25 December 2025"
-pub(crate) const FULL_DATE: &str = "%A %-d %B %Y";
+use crate::FULL_DATE;
 
 /// What the detail panel says about the selected day.
 #[derive(Debug, Eq, PartialEq)]
@@ -15,21 +14,20 @@ pub(crate) struct Detail {
 
 pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> Detail {
     let full_date = date.format(FULL_DATE).to_string();
-    let when = format!("{full_date} · {}", countdown(date, today));
-    if let Some(next) = calendar.next(date)
-        && next.holiday.date == date
-    {
+    let countdown = countdown(date, today);
+    let when = format!("{full_date} · {countdown}");
+    if let Some(holiday) = calendar.holiday(date) {
         let mut lines = Vec::new();
-        if next.holiday.predicted {
+        if holiday.predicted {
             lines.push("Predicted".to_owned());
             lines.push(format!("gov.uk hasn't published {} yet", date.year()));
         }
         if let Some(weekend) = calendar.four_day_weekend(date) {
             lines.push(format!("Four-day weekend, {weekend}"));
         }
-        lines.extend(calendar.bridges_joined(date).map(bridge_line));
+        lines.extend(calendar.bridges_joined(date).map(ToString::to_string));
         return Detail {
-            title: next.holiday.name.clone(),
+            title: holiday.name.clone(),
             when,
             lines,
         };
@@ -38,7 +36,7 @@ pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> 
         return Detail {
             title: "Bridge".to_owned(),
             when,
-            lines: vec![bridge_line(bridge)],
+            lines: vec![bridge.to_string()],
         };
     }
     if let Some(weekend) = calendar.four_day_weekend(date) {
@@ -50,7 +48,7 @@ pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> 
     }
     Detail {
         title: full_date,
-        when: countdown(date, today),
+        when: countdown,
         lines: calendar
             .next(date)
             .map(|next| {
@@ -62,14 +60,6 @@ pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> 
             })
             .into_iter()
             .collect(),
-    }
-}
-
-fn bridge_line(bridge: &Bridge) -> String {
-    if bridge.predicted {
-        format!("{bridge} (predicted)")
-    } else {
-        bridge.to_string()
     }
 }
 

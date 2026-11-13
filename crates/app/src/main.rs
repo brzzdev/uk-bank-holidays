@@ -4,7 +4,7 @@ mod sidebar;
 
 use std::process;
 
-use bank_holidays::{Division, Holidays, merge, snapshot};
+use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
 use chrono::{Datelike, Local, Months, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
@@ -12,8 +12,9 @@ use gpui_kit::component::{
     ActiveTheme, Disableable as _, IconName, Sizable as _, Theme, TitleBar, h_flex, v_flex,
 };
 use gpui_kit::{
-    AppContext, Bounds, Context, IntoElement, ParentElement, QuitMode, Render, Styled, Window,
-    WindowBounds, WindowOptions, application, assets, div, init, open_window, px, size,
+    App, AppContext, Bounds, ClickEvent, Context, IntoElement, ParentElement, QuitMode, Render,
+    Styled, Window, WindowBounds, WindowOptions, application, assets, div, init, open_window, px,
+    size,
 };
 
 /// The division tabs in order, with their labels.
@@ -22,6 +23,8 @@ const DIVISIONS: [(Division, &str); 3] = [
     (Division::Scotland, "Scotland"),
     (Division::NorthernIreland, "Northern Ireland"),
 ];
+/// "Thursday 25 December 2025"
+const FULL_DATE: &str = "%A %-d %B %Y";
 const WINDOW_HEIGHT: f32 = 600.;
 const WINDOW_WIDTH: f32 = 880.;
 
@@ -48,13 +51,27 @@ impl BankHolidays {
         }
     }
 
+    fn in_range(&self, date: NaiveDate) -> bool {
+        self.holidays.years(self.division).contains(&date.year())
+    }
+
     /// Selects a day in the available year range, and shows its month.
     fn select(&mut self, date: NaiveDate) {
-        if !self.holidays.years(self.division).contains(&date.year()) {
+        if !self.in_range(date) {
             return;
         }
         self.selected = date;
         self.month = first_of_month(date);
+    }
+
+    fn select_on_click(
+        date: NaiveDate,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+        cx.listener(move |this, _, _, cx| {
+            this.select(date);
+            cx.notify();
+        })
     }
 
     /// A ‹ or › button that moves the shown month, greyed when the move leaves the available year
@@ -88,10 +105,7 @@ impl BankHolidays {
         } else {
             self.month.checked_add_months(step)
         }?;
-        self.holidays
-            .years(self.division)
-            .contains(&month.year())
-            .then_some(month)
+        self.in_range(month).then_some(month)
     }
 
     fn title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -116,6 +130,7 @@ impl BankHolidays {
 impl Render for BankHolidays {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let today = Local::now().date_naive();
+        let calendar = Calendar::new(&self.holidays, self.division);
         v_flex()
             .size_full()
             .bg(cx.theme().background)
@@ -125,8 +140,8 @@ impl Render for BankHolidays {
                 h_flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.sidebar(today, cx))
-                    .child(self.month_pane(today, cx)),
+                    .child(self.sidebar(&calendar, today, cx))
+                    .child(self.month_pane(&calendar, today, cx)),
             )
     }
 }

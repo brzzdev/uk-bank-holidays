@@ -21,8 +21,7 @@ pub struct Span {
 }
 
 impl Span {
-    #[must_use]
-    pub fn contains(self, day: NaiveDate) -> bool {
+    pub(crate) fn contains(self, day: NaiveDate) -> bool {
         (self.first..=self.last).contains(&day)
     }
 
@@ -61,7 +60,7 @@ pub struct Bridge {
     pub predicted: bool,
 }
 
-/// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)"
+/// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)", ending " (predicted)" when predicted
 impl fmt::Display for Bridge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let days = if self.days_booked == 1 { "day" } else { "days" };
@@ -72,7 +71,11 @@ impl fmt::Display for Bridge {
             self.booked,
             self.off.day_count(),
             self.off,
-        )
+        )?;
+        if self.predicted {
+            f.write_str(" (predicted)")?;
+        }
+        Ok(())
     }
 }
 
@@ -194,7 +197,7 @@ impl<'a> Calendar<'a> {
 
     #[must_use]
     pub fn day(&self, date: NaiveDate) -> Day {
-        if let Some(holiday) = self.holidays.get(&date) {
+        if let Some(holiday) = self.holiday(date) {
             return if holiday.predicted {
                 Day::PredictedBankHoliday
             } else {
@@ -230,6 +233,12 @@ impl<'a> Calendar<'a> {
         self.bridges
             .values()
             .filter(move |bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
+    }
+
+    /// The bank holiday on a day.
+    #[must_use]
+    pub fn holiday(&self, date: NaiveDate) -> Option<&'a BankHoliday> {
+        self.holidays.get(&date).copied()
     }
 
     #[must_use]

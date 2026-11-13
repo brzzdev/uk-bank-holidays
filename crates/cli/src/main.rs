@@ -148,8 +148,7 @@ fn run(
                             text.push_str(" · four-day weekend");
                         }
                         if let Some(bridge) = calendar.bridge_after(holiday.date) {
-                            let _ =
-                                write!(text, " · {bridge}{}", predicted_marker(bridge.predicted));
+                            let _ = write!(text, " · {bridge}");
                         }
                         text.push('\n');
                         text
