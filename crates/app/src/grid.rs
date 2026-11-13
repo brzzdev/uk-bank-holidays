@@ -419,22 +419,21 @@ mod tests {
         });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
-            for (edge, colour) in [
-                ("four-day weekend edge", four_day_weekend_edge(&theme)),
-                ("outline", outline(&theme)),
+            for (mark, colour, minimum) in [
+                ("divider", divider(&theme), DIVIDER_CONTRAST),
+                (
+                    "four-day weekend edge",
+                    four_day_weekend_edge(&theme),
+                    GRAPHIC_CONTRAST,
+                ),
+                ("outline", outline(&theme), GRAPHIC_CONTRAST),
             ] {
                 let ratio = contrast(colour, theme.background);
-                if ratio < GRAPHIC_CONTRAST {
+                if ratio < minimum {
                     failures.push(format!(
-                        "{appearance}: {edge} on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
+                        "{appearance}: {mark} on the window is {ratio:.2}, under {minimum}"
                     ));
                 }
-            }
-            let ratio = contrast(divider(&theme), theme.background);
-            if ratio < DIVIDER_CONTRAST {
-                failures.push(format!(
-                    "{appearance}: divider on the window is {ratio:.2}, under {DIVIDER_CONTRAST}"
-                ));
             }
             for (selected, area, disc, overflow) in looks.clone() {
                 // A bridge books working days, so it never holds a bank holiday's disc.
