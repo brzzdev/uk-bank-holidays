@@ -19,7 +19,7 @@ Needs Rust 1.100 or newer, [`just`](https://just.systems), and, for `just instal
 just test          # run the test suite
 just lint          # clippy, warnings as errors
 just format        # rustfmt
-just install-app   # build Bank Holidays.app and install it in ~/Applications
+just install-app   # build Bank Holidays.app and install it in /Applications
 just tools         # install a pre-commit hook running format-check and lint
 ```
 
