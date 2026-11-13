@@ -288,11 +288,10 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .rounded(px(CELL_RADIUS))
         .map(|shading| match look.area {
             Some(Area::Bridge) => shading.bg(bridge_pattern(theme)),
-            // A selected day's outline is its edge: a second border would crowd today's ring.
-            Some(Area::FourDayWeekend) if !look.selected => shading
+            Some(Area::FourDayWeekend) => shading
                 .border_1()
                 .border_color(four_day_weekend_edge(theme)),
-            Some(Area::FourDayWeekend) | None => shading,
+            None => shading,
         })
         .child(ring);
     div()
