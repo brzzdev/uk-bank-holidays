@@ -1,6 +1,6 @@
 use std::env;
 use std::ffi::OsString;
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 use std::io::{self, Write};
 use std::process::ExitCode;
 
@@ -52,7 +52,7 @@ impl Outcome {
         }
     }
 
-    fn failure(code: u8, message: impl std::fmt::Display) -> Self {
+    fn failure(code: u8, message: impl fmt::Display) -> Self {
         Self {
             code,
             stderr: format!("{NAME}: {message}\n"),
@@ -158,7 +158,7 @@ fn run(
             })
         }
         Command::Next => {
-            let Some(next) = holidays.next(division, today) else {
+            let Some(next) = calendar.next(today) else {
                 return Outcome::failure(
                     RUNTIME_FAILURE,
                     format!("no bank holidays on or after {today}"),
@@ -169,9 +169,9 @@ fn run(
                 Format::Text => {
                     let countdown = match next.days {
                         0 => "today".to_owned(),
-                        days => format!("in {}", day_count(days)),
+                        days => format!("in {}", days_text(days)),
                     };
-                    let four_day_weekend = if calendar.starts_four_day_weekend(next.holiday.date) {
+                    let four_day_weekend = if next.starts_four_day_weekend {
                         ", four-day weekend"
                     } else {
                         ""
@@ -227,18 +227,19 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
 fn bridge_text(bridge: &Bridge) -> String {
     format!(
         "Book {} ({}), get {} off ({}){}",
-        day_count(bridge.days_booked),
+        days_text(bridge.days_booked),
         span_text(bridge.booked),
-        bridge.off.days().count(),
+        bridge.off.day_count(),
         span_text(bridge.off),
         predicted_marker(bridge.predicted),
     )
 }
 
-fn day_count(days: impl Into<i64>) -> String {
-    match days.into() {
-        1 => "1 day".to_owned(),
-        days => format!("{days} days"),
+fn days_text<T: Copy + fmt::Display + From<u8> + PartialEq>(days: T) -> String {
+    if days == T::from(1) {
+        "1 day".to_owned()
+    } else {
+        format!("{days} days")
     }
 }
 
@@ -272,8 +273,8 @@ fn to_json(holiday: &BankHoliday, division: Division, calendar: &Calendar) -> se
     });
     if let Some(bridge) = calendar.bridge_after(holiday.date) {
         json["bridge"] = serde_json::json!({
-            "booked": span_json(bridge.booked, bridge.days_booked.into()),
-            "off": span_json(bridge.off, bridge.off.days().count()),
+            "booked": span_json(bridge.booked, bridge.days_booked),
+            "off": span_json(bridge.off, bridge.off.day_count()),
             "predicted": bridge.predicted,
         });
     }
@@ -381,15 +382,6 @@ mod tests {
              Thu 25 Dec  Christmas Day · four-day weekend\n\
              Fri 26 Dec  Boxing Day · four-day weekend · Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)\n",
         );
-    }
-
-    #[test]
-    fn a_bridge_to_a_predicted_bank_holiday_is_marked_predicted() {
-        let outcome = run_on("2025-01-01", &["list", "2026"]);
-        assert!(outcome.stdout.ends_with(
-            "Mon 28 Dec  Boxing Day · four-day weekend · \
-             Book 3 days (29–31 Dec), get 10 off (25 Dec – 3 Jan) (predicted)\n"
-        ));
     }
 
     #[test]

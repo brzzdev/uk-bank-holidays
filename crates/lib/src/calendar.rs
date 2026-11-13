@@ -5,7 +5,7 @@ use chrono::{Datelike, NaiveDate, Weekday};
 use crate::{BankHoliday, Division, Holidays};
 
 /// The most working days a bridge books.
-const MAX_DAYS_BOOKED: u8 = 8;
+const MAX_DAYS_BOOKED: usize = 8;
 /// The fewest days off in a four-day weekend.
 const MIN_FOUR_DAY_WEEKEND_DAYS: usize = 4;
 
@@ -22,6 +22,11 @@ impl Span {
         (self.first..=self.last).contains(&day)
     }
 
+    #[must_use]
+    pub fn day_count(self) -> usize {
+        self.days().count()
+    }
+
     pub fn days(self) -> impl Iterator<Item = NaiveDate> {
         self.first
             .iter_days()
@@ -32,7 +37,7 @@ impl Span {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Bridge {
     pub booked: Span,
-    pub days_booked: u8,
+    pub days_booked: usize,
     pub off: Span,
     /// Whether either stretch it joins holds a predicted bank holiday.
     pub predicted: bool,
@@ -48,6 +53,14 @@ pub enum Day {
     FourDayWeekend,
     Ordinary,
     PredictedBankHoliday,
+}
+
+/// The next bank holiday on or after a day.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Next<'a> {
+    pub days: i64,
+    pub holiday: &'a BankHoliday,
+    pub starts_four_day_weekend: bool,
 }
 
 /// A run of days off, as long as weekends and bank holidays allow, holding at least one bank
@@ -69,8 +82,8 @@ impl<'a> Calendar<'a> {
     #[must_use]
     pub fn new(holidays: &'a Holidays, division: Division) -> Self {
         let holidays: BTreeMap<_, _> = holidays
-            .years(division)
-            .filter_map(|year| holidays.year(division, year))
+            .years_of(division)
+            .values()
             .flatten()
             .map(|holiday| (holiday.date, holiday))
             .collect();
@@ -81,19 +94,16 @@ impl<'a> Calendar<'a> {
             .map(|stretch| stretch.span)
             .collect();
         let bridges = stretches
-            .windows(2)
-            .filter_map(|pair| {
-                let [before, after] = pair else {
-                    return None;
-                };
+            .array_windows()
+            .filter_map(|[before, after]| {
                 let booked = Span {
                     first: before.span.last.succ_opt()?,
                     last: after.span.first.pred_opt()?,
                 };
-                let days_booked =
-                    u8::try_from(booked.days().filter(|&day| !is_weekend(day)).count())
-                        .ok()
-                        .filter(|&days| days <= MAX_DAYS_BOOKED)?;
+                let days_booked = booked.days().filter(|&day| !is_weekend(day)).count();
+                if days_booked > MAX_DAYS_BOOKED {
+                    return None;
+                }
                 let bridge = Bridge {
                     booked,
                     days_booked,
@@ -117,6 +127,15 @@ impl<'a> Calendar<'a> {
         }
     }
 
+    /// The bridge that books a day.
+    #[must_use]
+    pub fn bridge(&self, date: NaiveDate) -> Option<&Bridge> {
+        if is_weekend(date) {
+            return None;
+        }
+        self.bridges().find(|bridge| bridge.booked.contains(date))
+    }
+
     /// The bridge that follows a bank holiday, when it's the last bank holiday before one.
     #[must_use]
     pub fn bridge_after(&self, holiday: NaiveDate) -> Option<&Bridge> {
@@ -125,17 +144,6 @@ impl<'a> Calendar<'a> {
 
     pub fn bridges(&self) -> impl Iterator<Item = &Bridge> {
         self.bridges.values()
-    }
-
-    /// Whether a bank holiday is the first bank holiday of a four-day weekend.
-    #[must_use]
-    pub fn starts_four_day_weekend(&self, holiday: NaiveDate) -> bool {
-        self.four_day_weekend(holiday).is_some_and(|weekend| {
-            self.holidays
-                .range(weekend.first..=weekend.last)
-                .next()
-                .is_some_and(|(&first, _)| first == holiday)
-        })
     }
 
     #[must_use]
@@ -150,7 +158,7 @@ impl<'a> Calendar<'a> {
         if self.four_day_weekend(date).is_some() {
             return Day::FourDayWeekend;
         }
-        if !is_weekend(date) && self.bridges().any(|bridge| bridge.booked.contains(date)) {
+        if self.bridge(date).is_some() {
             return Day::Bridge;
         }
         Day::Ordinary
@@ -169,12 +177,32 @@ impl<'a> Calendar<'a> {
     pub fn four_day_weekends(&self) -> &[Span] {
         &self.four_day_weekends
     }
+
+    #[must_use]
+    pub fn next(&self, from: NaiveDate) -> Option<Next<'a>> {
+        let (&date, &holiday) = self.holidays.range(from..).next()?;
+        Some(Next {
+            days: (date - from).num_days(),
+            holiday,
+            starts_four_day_weekend: self.starts_four_day_weekend(date),
+        })
+    }
+
+    /// Whether a bank holiday is the first bank holiday of a four-day weekend.
+    fn starts_four_day_weekend(&self, holiday: NaiveDate) -> bool {
+        self.four_day_weekend(holiday).is_some_and(|weekend| {
+            self.holidays
+                .range(weekend.first..=weekend.last)
+                .next()
+                .is_some_and(|(&first, _)| first == holiday)
+        })
+    }
 }
 
 impl Stretch<'_> {
     fn is_four_day_weekend(&self) -> bool {
         self.holidays.len() >= 2
-            && self.span.days().count() >= MIN_FOUR_DAY_WEEKEND_DAYS
+            && self.span.day_count() >= MIN_FOUR_DAY_WEEKEND_DAYS
             && self.span.days().any(is_weekend)
     }
 }
@@ -260,6 +288,15 @@ mod tests {
         )
     }
 
+    fn bridge(booked: (&str, &str), days_booked: usize, off: (&str, &str)) -> Bridge {
+        Bridge {
+            booked: span(booked.0, booked.1),
+            days_booked,
+            off: span(off.0, off.1),
+            predicted: false,
+        }
+    }
+
     fn bridges(holidays: &Holidays, division: Division) -> Vec<Bridge> {
         Calendar::new(holidays, division)
             .bridges()
@@ -272,22 +309,12 @@ mod tests {
         let holidays = holidays(&["2025-12-25", "2025-12-26", "2026-01-01"]);
         assert_eq!(
             bridges(&holidays, Division::EnglandAndWales),
-            [Bridge {
-                booked: span("2025-12-29", "2025-12-31"),
-                days_booked: 3,
-                off: span("2025-12-25", "2026-01-01"),
-                predicted: false,
-            }],
+            [bridge(
+                ("2025-12-29", "2025-12-31"),
+                3,
+                ("2025-12-25", "2026-01-01")
+            )],
         );
-    }
-
-    fn bridge(booked: (&str, &str), days_booked: u8, off: (&str, &str)) -> Bridge {
-        Bridge {
-            booked: span(booked.0, booked.1),
-            days_booked,
-            off: span(off.0, off.1),
-            predicted: false,
-        }
     }
 
     #[test]
@@ -491,12 +518,42 @@ mod tests {
         assert_eq!(calendar.bridge_after(date("2026-01-01")), None);
     }
 
+    fn next(holidays: &Holidays, from: &str) -> Option<(NaiveDate, i64, bool)> {
+        Calendar::new(holidays, Division::EnglandAndWales)
+            .next(date(from))
+            .map(|next| (next.holiday.date, next.days, next.starts_four_day_weekend))
+    }
+
+    #[test]
+    fn the_next_bank_holiday_on_its_own_day_is_zero_days_away() {
+        let holidays = holidays(&["2025-12-25"]);
+        assert_eq!(
+            next(&holidays, "2025-12-25"),
+            Some((date("2025-12-25"), 0, false))
+        );
+    }
+
+    #[test]
+    fn the_next_bank_holiday_after_the_last_of_a_year_is_in_the_next_year() {
+        let holidays = holidays(&["2025-12-26", "2026-01-01"]);
+        assert_eq!(
+            next(&holidays, "2025-12-27"),
+            Some((date("2026-01-01"), 5, false))
+        );
+    }
+
+    #[test]
+    fn there_is_no_next_bank_holiday_after_the_last_one_in_the_data() {
+        let holidays = holidays(&["2025-12-25"]);
+        assert_eq!(next(&holidays, "2025-12-26"), None);
+    }
+
     #[test]
     fn only_the_first_bank_holiday_of_a_four_day_weekend_starts_it() {
         let holidays = holidays(&["2022-12-26", "2022-12-27", "2025-07-14"]);
-        let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
-        assert!(calendar.starts_four_day_weekend(date("2022-12-26")));
-        assert!(!calendar.starts_four_day_weekend(date("2022-12-27")));
-        assert!(!calendar.starts_four_day_weekend(date("2025-07-14")));
+        let starts = |from| next(&holidays, from).is_some_and(|(_, _, starts)| starts);
+        assert!(starts("2022-12-26"));
+        assert!(!starts("2022-12-27"));
+        assert!(!starts("2025-07-14"));
     }
 }
