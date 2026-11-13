@@ -70,6 +70,14 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
     Holidays { divisions }
 }
 
+fn last_published_year(years: &BTreeMap<i32, Vec<BankHoliday>>) -> Option<i32> {
+    years
+        .iter()
+        .rev()
+        .find(|(_, holidays)| holidays.iter().any(|holiday| !holiday.predicted))
+        .map(|(&year, _)| year)
+}
+
 pub(crate) fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<BankHoliday>> {
     let mut years: BTreeMap<i32, Vec<BankHoliday>> = BTreeMap::new();
     for event in feed.events(division) {
@@ -92,11 +100,11 @@ impl Holidays {
         let last_predicted = self
             .divisions
             .values()
-            .filter_map(|years| years.keys().next_back().copied())
+            .filter_map(last_published_year)
             .fold(current_year, i32::max)
             + PREDICTED_YEARS_AHEAD;
         for (&division, years) in &mut self.divisions {
-            let Some(&last) = years.keys().next_back() else {
+            let Some(last) = last_published_year(years) else {
                 continue;
             };
             for year in last + 1..=last_predicted {
@@ -261,6 +269,15 @@ mod tests {
                 predicted: true,
             }),
         );
+    }
+
+    #[test]
+    fn predicting_again_keeps_the_last_year_two_years_after_the_published_data() {
+        let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
+        let holidays = merge(&snapshot, None)
+            .with_predictions(2025)
+            .with_predictions(2025);
+        assert_eq!(holidays.years(Division::EnglandAndWales), 2026..=2028);
     }
 
     #[test]
