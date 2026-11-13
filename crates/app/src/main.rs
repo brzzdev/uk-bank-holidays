@@ -27,13 +27,12 @@ struct BankHolidays {
 }
 
 impl BankHolidays {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(current_year: i32, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Theme::sync_system_appearance(Some(window), cx);
         cx.observe_window_appearance(window, |_, window, cx| {
             Theme::sync_system_appearance(Some(window), cx);
         })
         .detach();
-        let current_year = Local::now().year();
         Self {
             division: Division::EnglandAndWales,
             holidays: merge(&snapshot(), None).with_predictions(current_year),
@@ -71,7 +70,7 @@ impl Render for BankHolidays {
                 h_flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.sidebar(cx))
+                    .child(self.sidebar(Local::now().date_naive(), cx))
                     .child(div().flex_1()),
             )
     }
@@ -91,8 +90,9 @@ fn main() {
                 ))),
                 ..TitleBar::window_options()
             };
+            let current_year = Local::now().year();
             if let Err(error) = open_window(options, cx, |window, cx| {
-                cx.new(|cx| BankHolidays::new(window, cx))
+                cx.new(|cx| BankHolidays::new(current_year, window, cx))
             }) {
                 eprintln!("bank-holidays-app: couldn't open a window: {error}");
                 process::exit(1);

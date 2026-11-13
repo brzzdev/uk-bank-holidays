@@ -1,5 +1,5 @@
 use bank_holidays::{BankHoliday, Calendar, Next};
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{
@@ -25,8 +25,7 @@ enum Dot {
 }
 
 impl BankHolidays {
-    pub(crate) fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let today = Local::now().date_naive();
+    pub(crate) fn sidebar(&self, today: NaiveDate, cx: &mut Context<Self>) -> impl IntoElement {
         let calendar = Calendar::new(&self.holidays, self.division);
         let holidays = self
             .holidays
@@ -119,6 +118,17 @@ fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
     None
 }
 
+/// A dashed dot takes the row's text colour.
+fn dot_mark(dot: Option<Dot>, text: Hsla, theme: &Theme) -> Div {
+    let mark = div().flex_none().size(px(DOT_SIZE)).rounded_full();
+    match dot {
+        None => mark,
+        Some(Dot::Bridge) => mark.bg(theme.warning),
+        Some(Dot::FourDayWeekend) => mark.bg(theme.red),
+        Some(Dot::Predicted) => mark.border_1().border_dashed().border_color(text),
+    }
+}
+
 fn next_holiday(next: &Next, cx: &App) -> Div {
     let theme = cx.theme();
     let caption = match next.days {
@@ -200,17 +210,6 @@ fn row(holiday: &BankHoliday, dot: Option<Dot>, today: NaiveDate, cx: &App) -> D
         )
         .child(div().flex_1().min_w_0().child(holiday.name.clone()))
         .child(dot_mark(dot, colour, theme))
-}
-
-/// A dashed dot takes the row's text colour.
-fn dot_mark(dot: Option<Dot>, text: Hsla, theme: &Theme) -> Div {
-    let mark = div().flex_none().size(px(DOT_SIZE)).rounded_full();
-    match dot {
-        None => mark,
-        Some(Dot::Bridge) => mark.bg(theme.warning),
-        Some(Dot::FourDayWeekend) => mark.bg(theme.red),
-        Some(Dot::Predicted) => mark.border_1().border_dashed().border_color(text),
-    }
 }
 
 #[cfg(test)]
