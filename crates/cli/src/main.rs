@@ -247,7 +247,7 @@ fn predicted_marker(predicted: bool) -> &'static str {
     if predicted { " (predicted)" } else { "" }
 }
 
-/// "2 Jan", "29–31 Dec" or "25 Dec – 1 Jan"
+/// "2 Jan", "29–31 Dec", or "25 Dec – 1 Jan"
 fn span_text(span: Span) -> String {
     let last = span.last.format("%-d %b");
     if span.first == span.last {

@@ -71,7 +71,7 @@ struct Stretch<'a> {
     span: Span,
 }
 
-/// One division's bank holidays, four-day weekends and bridges across all its years.
+/// One division's bank holidays, four-day weekends, and bridges across all its years.
 pub struct Calendar<'a> {
     /// Keyed by the last bank holiday before the bridge.
     bridges: BTreeMap<NaiveDate, Bridge>,
@@ -97,7 +97,7 @@ impl<'a> Calendar<'a> {
             .chain(following_year.iter().map(|holiday| (holiday.date, holiday)))
             .collect();
         let stretches = stretches(&through_following_year);
-        let known = |stretch: &Stretch| {
+        let in_range = |stretch: &Stretch| {
             stretch
                 .holidays
                 .iter()
@@ -105,12 +105,12 @@ impl<'a> Calendar<'a> {
         };
         let four_day_weekends = stretches
             .iter()
-            .filter(|stretch| known(stretch) && stretch.is_four_day_weekend())
+            .filter(|stretch| in_range(stretch) && stretch.is_four_day_weekend())
             .map(|stretch| stretch.span)
             .collect();
         let bridges = stretches
             .array_windows()
-            .filter(|[before, _]| known(before))
+            .filter(|[before, _]| in_range(before))
             .filter_map(|[before, after]| {
                 let booked = Span {
                     first: before.span.last.succ_opt()?,
@@ -145,7 +145,6 @@ impl<'a> Calendar<'a> {
     }
 
     /// The bridge that books a day.
-    #[must_use]
     fn bridge(&self, date: NaiveDate) -> Option<&Bridge> {
         if is_weekend(date) {
             return None;
@@ -343,11 +342,11 @@ mod tests {
                 2000,
             ),
             (
-                "2011-04-22",
-                "2011-04-25",
-                "2011-05-02",
-                ("2011-04-26", "2011-04-29"),
-                2011,
+                "2095-04-22",
+                "2095-04-25",
+                "2095-05-02",
+                ("2095-04-26", "2095-04-29"),
+                2095,
             ),
             (
                 "2038-04-23",
@@ -608,5 +607,13 @@ mod tests {
             }),
         );
         assert_eq!(calendar.next(date("2025-12-27")), None);
+    }
+
+    #[test]
+    fn the_predicted_year_after_the_data_has_no_four_day_weekends_or_bridges_of_its_own() {
+        let holidays = holidays(&["2010-12-27", "2010-12-28"]);
+        let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
+        assert_eq!(calendar.day(date("2011-04-23")), Day::Ordinary);
+        assert_eq!(calendar.day(date("2011-04-26")), Day::Ordinary);
     }
 }
