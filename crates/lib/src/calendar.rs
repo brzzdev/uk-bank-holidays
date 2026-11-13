@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 
 use chrono::{Datelike, NaiveDate, Weekday};
 
@@ -20,7 +21,8 @@ pub struct Span {
 }
 
 impl Span {
-    pub(crate) fn contains(self, day: NaiveDate) -> bool {
+    #[must_use]
+    pub fn contains(self, day: NaiveDate) -> bool {
         (self.first..=self.last).contains(&day)
     }
 
@@ -36,6 +38,20 @@ impl Span {
     }
 }
 
+/// "2 Jan", "29–31 Dec", or "25 Dec – 1 Jan"
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let last = self.last.format("%-d %b");
+        if self.first == self.last {
+            write!(f, "{last}")
+        } else if (self.first.year(), self.first.month()) == (self.last.year(), self.last.month()) {
+            write!(f, "{}–{last}", self.first.format("%-d"))
+        } else {
+            write!(f, "{} – {last}", self.first.format("%-d %b"))
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Bridge {
     pub booked: Span,
@@ -43,6 +59,21 @@ pub struct Bridge {
     pub off: Span,
     /// Whether either stretch it joins holds a predicted bank holiday.
     pub predicted: bool,
+}
+
+/// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)"
+impl fmt::Display for Bridge {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let days = if self.days_booked == 1 { "day" } else { "days" };
+        write!(
+            f,
+            "Book {} {days} ({}), get {} off ({})",
+            self.days_booked,
+            self.booked,
+            self.off.day_count(),
+            self.off,
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,7 +176,8 @@ impl<'a> Calendar<'a> {
     }
 
     /// The bridge that books a day.
-    fn bridge_booked_on(&self, date: NaiveDate) -> Option<&Bridge> {
+    #[must_use]
+    pub fn bridge_booked_on(&self, date: NaiveDate) -> Option<&Bridge> {
         if is_weekend(date) {
             return None;
         }
@@ -192,12 +224,12 @@ impl<'a> Calendar<'a> {
             .find(|weekend| weekend.contains(date))
     }
 
-    /// Whether a day is in either stretch of days off a bridge joins.
-    #[must_use]
-    pub fn joins_bridge(&self, date: NaiveDate) -> bool {
+    /// The bridges whose stretches of days off hold a day: one leading in, one leading out, or
+    /// both.
+    pub fn bridges_joined(&self, date: NaiveDate) -> impl Iterator<Item = &Bridge> {
         self.bridges
             .values()
-            .any(|bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
+            .filter(move |bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
     }
 
     #[must_use]
@@ -330,10 +362,11 @@ mod tests {
     fn days_off_on_both_sides_of_a_bridge_join_it_but_its_booked_days_dont() {
         let holidays = holidays(&["2025-05-05", "2025-12-25", "2025-12-26", "2026-01-01"]);
         let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
-        assert!(calendar.joins_bridge(date("2025-12-25")));
-        assert!(calendar.joins_bridge(date("2026-01-01")));
-        assert!(!calendar.joins_bridge(date("2025-12-30")));
-        assert!(!calendar.joins_bridge(date("2025-05-05")));
+        let joins_bridge = |day| calendar.bridges_joined(date(day)).next().is_some();
+        assert!(joins_bridge("2025-12-25"));
+        assert!(joins_bridge("2026-01-01"));
+        assert!(!joins_bridge("2025-12-30"));
+        assert!(!joins_bridge("2025-05-05"));
     }
 
     #[test]

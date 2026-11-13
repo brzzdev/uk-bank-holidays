@@ -4,9 +4,7 @@ use std::fmt::{self, Write as _};
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-use bank_holidays::{
-    BankHoliday, Bridge, Calendar, Division, Holidays, Span, load, merge, snapshot,
-};
+use bank_holidays::{BankHoliday, Calendar, Division, Holidays, load, merge, snapshot};
 use chrono::{Datelike, Local, NaiveDate};
 use lexopt::prelude::*;
 
@@ -150,7 +148,8 @@ fn run(
                             text.push_str(" · four-day weekend");
                         }
                         if let Some(bridge) = calendar.bridge_after(holiday.date) {
-                            let _ = write!(text, " · {}", bridge_text(bridge));
+                            let _ =
+                                write!(text, " · {bridge}{}", predicted_marker(bridge.predicted));
                         }
                         text.push('\n');
                         text
@@ -223,20 +222,8 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
     })
 }
 
-/// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)"
-fn bridge_text(bridge: &Bridge) -> String {
-    format!(
-        "Book {} ({}), get {} off ({}){}",
-        days_text(bridge.days_booked),
-        span_text(bridge.booked),
-        bridge.off.day_count(),
-        span_text(bridge.off),
-        predicted_marker(bridge.predicted),
-    )
-}
-
-fn days_text<T: Copy + fmt::Display + From<u8> + PartialEq>(days: T) -> String {
-    if days == T::from(1) {
+fn days_text(days: i64) -> String {
+    if days == 1 {
         "1 day".to_owned()
     } else {
         format!("{days} days")
@@ -245,18 +232,6 @@ fn days_text<T: Copy + fmt::Display + From<u8> + PartialEq>(days: T) -> String {
 
 fn predicted_marker(predicted: bool) -> &'static str {
     if predicted { " (predicted)" } else { "" }
-}
-
-/// "2 Jan", "29–31 Dec", or "25 Dec – 1 Jan"
-fn span_text(span: Span) -> String {
-    let last = span.last.format("%-d %b");
-    if span.first == span.last {
-        last.to_string()
-    } else if (span.first.year(), span.first.month()) == (span.last.year(), span.last.month()) {
-        format!("{}–{last}", span.first.format("%-d"))
-    } else {
-        format!("{} – {last}", span.first.format("%-d %b"))
-    }
 }
 
 fn to_json(holiday: &BankHoliday, calendar: &Calendar) -> serde_json::Value {
