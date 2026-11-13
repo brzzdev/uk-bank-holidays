@@ -50,7 +50,7 @@ actions!(
 
 /// How often the clock is read for a new day.
 const DATE_CHECK_INTERVAL: Duration = Duration::from_secs(60);
-/// How far a divider is lifted from `border` towards `foreground`.
+/// The opacity of `foreground` laid over `border` for a divider.
 const DIVIDER_LIFT: f32 = 0.12;
 /// The division tabs in order, with their labels.
 const DIVISIONS: [(Division, &str); 3] = [
