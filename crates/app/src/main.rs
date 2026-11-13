@@ -216,23 +216,14 @@ mod tests {
     fn stepping_months_and_years_stops_at_the_ends_of_the_available_range() {
         let mut app = app("2026-01-01");
         let years = app.holidays.years(app.division);
-        let first = NaiveDate::from_ymd_opt(*years.start(), 1, 1).expect("1 Jan exists");
-        let last = NaiveDate::from_ymd_opt(*years.end(), 12, 1).expect("1 Dec exists");
-        app.month = first;
+        let (first, last) = (*years.start(), *years.end());
+        let month = |year, month| NaiveDate::from_ymd_opt(year, month, 1);
+        app.month = month(first, 1).expect("January exists");
         assert_eq!(app.stepped_month(-1), None);
-        assert_eq!(
-            app.stepped_month(1),
-            first.checked_add_months(Months::new(1))
-        );
-        assert_eq!(
-            app.stepped_month(12),
-            first.checked_add_months(Months::new(12))
-        );
-        app.month = last;
+        assert_eq!(app.stepped_month(1), month(first, 2));
+        assert_eq!(app.stepped_month(12), month(first + 1, 1));
+        app.month = month(last, 12).expect("December exists");
         assert_eq!(app.stepped_month(1), None);
-        assert_eq!(
-            app.stepped_month(-12),
-            last.checked_sub_months(Months::new(12))
-        );
+        assert_eq!(app.stepped_month(-12), month(last - 1, 12));
     }
 }

@@ -6,10 +6,10 @@ use crate::FULL_DATE;
 /// What the detail panel says about the selected day.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct Detail {
+    pub(crate) lines: Vec<String>,
     pub(crate) title: String,
     /// The date and how far it is from today.
     pub(crate) when: String,
-    pub(crate) lines: Vec<String>,
 }
 
 pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> Detail {

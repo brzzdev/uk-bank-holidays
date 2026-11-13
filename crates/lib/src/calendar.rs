@@ -449,6 +449,15 @@ mod tests {
     }
 
     #[test]
+    fn a_one_day_bridge_books_1_day_on_a_single_date() {
+        let holidays = holidays(&["2025-05-01", "2025-05-05"]);
+        assert_eq!(
+            bridges(&holidays, Division::EnglandAndWales)[0].to_string(),
+            "Book 1 day (2 May), get 5 off (1–5 May)",
+        );
+    }
+
+    #[test]
     fn eight_working_days_is_the_longest_bridge() {
         let holidays = holidays(&["2025-01-01", "2025-01-14"]);
         assert_eq!(

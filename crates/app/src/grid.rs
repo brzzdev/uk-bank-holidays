@@ -4,7 +4,7 @@ use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, ThemeColor
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, Background, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    Stateful, StatefulInteractiveElement as _, Styled, div, pattern_slash, px,
+    Stateful, StatefulInteractiveElement as _, Styled, div, pattern_slash, px, transparent_black,
 };
 
 use crate::detail::detail;
@@ -19,7 +19,7 @@ const BRIDGE_TINT: f32 = 0.12;
 /// The red behind a four-day weekend's days, as an opacity of `red`.
 const FOUR_DAY_WEEKEND_TINT: f32 = 0.12;
 /// A dimmed overflow day's bank holiday disc, as an opacity of `red`.
-const OVERFLOW_FILL: f32 = 0.8;
+const OVERFLOW_DISC: f32 = 0.8;
 
 const CELL_HEIGHT: f32 = 42.;
 const CELL_RADIUS: f32 = 6.;
@@ -171,8 +171,7 @@ fn area_tint(theme: &ThemeColor, area: Area) -> Hsla {
     }
 }
 
-/// The opaque colour behind a day's numeral, which a bridge day's disc repeats over the hatching
-/// to keep its lines off the numeral.
+/// The opaque colour of a day's cell, under any hatching.
 fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hsla {
     let base = if selected {
         theme.accent
@@ -180,6 +179,11 @@ fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hs
         theme.background
     };
     area.map_or(base, |area| base.blend(area_tint(theme, area)))
+}
+
+/// The selected day's own colour, since `accent` alone barely differs from a plain cell.
+fn selection_outline(theme: &ThemeColor) -> Hsla {
+    theme.muted_foreground
 }
 
 fn bridge_hatch(theme: &ThemeColor) -> Hsla {
@@ -194,9 +198,9 @@ fn bridge_pattern(theme: &ThemeColor) -> Background {
     )
 }
 
-fn disc_fill(theme: &ThemeColor, overflow: bool) -> Hsla {
+fn disc_colour(theme: &ThemeColor, overflow: bool) -> Hsla {
     if overflow {
-        theme.red.opacity(OVERFLOW_FILL)
+        theme.red.opacity(OVERFLOW_DISC)
     } else {
         theme.red
     }
@@ -220,6 +224,7 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .rounded_full()
         .text_color(numeral_colour(theme, look.disc, look.overflow))
         .map(|disc| match look.disc {
+            // An opaque disc keeps the hatch lines off the numeral.
             None => disc.when(look.area == Some(Area::Bridge), |disc| {
                 disc.bg(cell_background(theme, look.selected, look.area))
             }),
@@ -227,8 +232,8 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
                 .font_semibold()
                 .border_1()
                 .border_dashed()
-                .border_color(theme.red),
-            Some(Disc::Filled) => disc.font_semibold().bg(disc_fill(theme, look.overflow)),
+                .border_color(disc_colour(theme, look.overflow)),
+            Some(Disc::Filled) => disc.font_semibold().bg(disc_colour(theme, look.overflow)),
         })
         .child(date.day().to_string());
     let ring = div()
@@ -257,6 +262,12 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .h(px(CELL_HEIGHT))
         .rounded(px(CELL_RADIUS))
         .text_sm()
+        .border_2()
+        .border_color(if look.selected {
+            selection_outline(theme)
+        } else {
+            transparent_black()
+        })
         .bg(cell_background(theme, look.selected, look.area))
         .child(shading)
 }
@@ -299,11 +310,10 @@ mod tests {
 
     use gpui_kit::Rgba;
 
+    /// WCAG's minimum for graphics.
+    const GRAPHIC_CONTRAST: f32 = 3.;
     /// WCAG's minimum for text.
     const TEXT_CONTRAST: f32 = 4.5;
-    /// WCAG's minimum for graphics, and for overflow days, which repeat days drawn in full in
-    /// their own month.
-    const GRAPHIC_CONTRAST: f32 = 3.;
 
     fn date(s: &str) -> NaiveDate {
         s.parse().expect("test dates are valid")
@@ -363,12 +373,13 @@ mod tests {
                     continue;
                 }
                 let behind = cell_background(&theme, selected, area);
-                let fill = behind.blend(disc_fill(&theme, overflow));
+                let fill = behind.blend(disc_colour(&theme, overflow));
                 let numeral_behind = if disc == Some(Disc::Filled) {
                     fill
                 } else {
                     behind
                 };
+                // Overflow days repeat days drawn in full in their own month.
                 let text_minimum = if overflow {
                     GRAPHIC_CONTRAST
                 } else {
@@ -383,6 +394,16 @@ mod tests {
                         text_minimum,
                     ),
                 ];
+                if selected {
+                    let outline = selection_outline(&theme);
+                    checks.push(("selection outline", outline, behind, GRAPHIC_CONTRAST));
+                    checks.push((
+                        "selection outline on the window",
+                        outline,
+                        theme.background,
+                        GRAPHIC_CONTRAST,
+                    ));
+                }
                 match (area, disc) {
                     (Some(Area::Bridge), _) => checks.push((
                         "today's ring on hatching",
@@ -391,7 +412,7 @@ mod tests {
                         GRAPHIC_CONTRAST,
                     )),
                     (_, Some(Disc::Dashed)) => {
-                        checks.push(("outline", theme.red, behind, GRAPHIC_CONTRAST));
+                        checks.push(("outline", fill, behind, GRAPHIC_CONTRAST));
                     }
                     (_, Some(Disc::Filled)) => {
                         checks.push(("fill", fill, behind, GRAPHIC_CONTRAST));
