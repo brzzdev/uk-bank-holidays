@@ -8,6 +8,7 @@ use gpui_kit::{
 };
 
 use crate::detail::detail;
+use crate::selection::Move;
 use crate::{BankHolidays, first_of_month};
 
 /// The bridge's hatch lines, as an opacity of `warning`.
@@ -61,7 +62,8 @@ impl BankHolidays {
         today: NaiveDate,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let days: Vec<_> = month_days(self.month).collect();
+        let month = first_of_month(self.selection.date);
+        let days: Vec<_> = month_days(month).collect();
         let weeks: Vec<_> = days
             .chunks(WEEKDAYS.len())
             .enumerate()
@@ -72,18 +74,33 @@ impl BankHolidays {
                         let look = Look {
                             area: area(calendar, date),
                             disc: disc(calendar, date),
-                            overflow: first_of_month(date) != self.month,
-                            selected: date == self.selected,
+                            overflow: first_of_month(date) != month,
+                            selected: date == self.selection.date,
                             today: date == today,
                         };
+                        let selectable = self.moved(Move::To(date), calendar).is_some();
                         cell(week * WEEKDAYS.len() + weekday, date, &look, cx)
-                            .on_click(Self::select_on_click(date, cx))
+                            .when(selectable, |cell| {
+                                cell.on_click(Self::select_on_click(date, cx))
+                            })
                     }))
             })
             .collect();
-        let detail = detail(calendar, self.selected, today);
-        let previous = self.step_button("previous-month", IconName::ChevronLeft, -1, cx);
-        let next = self.step_button("next-month", IconName::ChevronRight, 1, cx);
+        let detail = detail(calendar, self.selection.date, today);
+        let previous = self.step_button(
+            "previous-month",
+            IconName::ChevronLeft,
+            Move::Months(-1),
+            calendar,
+            cx,
+        );
+        let next = self.step_button(
+            "next-month",
+            IconName::ChevronRight,
+            Move::Months(1),
+            calendar,
+            cx,
+        );
         let theme = cx.theme();
         v_flex()
             .flex_1()
@@ -106,7 +123,7 @@ impl BankHolidays {
                                     .text_center()
                                     .text_lg()
                                     .font_semibold()
-                                    .child(self.month.format("%B %Y").to_string()),
+                                    .child(month.format("%B %Y").to_string()),
                             )
                             .child(next),
                     )

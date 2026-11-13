@@ -242,6 +242,14 @@ impl<'a> Calendar<'a> {
     }
 
     #[must_use]
+    pub fn holiday_before(&self, date: NaiveDate) -> Option<&'a BankHoliday> {
+        self.holidays
+            .range(..date)
+            .next_back()
+            .map(|(_, &holiday)| holiday)
+    }
+
+    #[must_use]
     pub fn next(&self, from: NaiveDate) -> Option<Next<'a>> {
         let (&date, &holiday) = self.holidays.range(from..).next()?;
         Some(Next {
