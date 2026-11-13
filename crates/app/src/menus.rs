@@ -16,7 +16,6 @@ actions!(
 
 const APP_NAME: &str = "Bank Holidays";
 
-/// Go's items are greyed by GPUI wherever the window hasn't registered them.
 pub(crate) fn menus() -> [Menu; 4] {
     [
         Menu::new(APP_NAME).items([
@@ -56,7 +55,7 @@ pub(crate) fn menus() -> [Menu; 4] {
     ]
 }
 
-/// Close and Minimise act on `NSApp`'s key window, so they reach the About panel too.
+/// Close and Minimise act on `NSApp`'s key window, like native menu items, so ⌘W closes the About panel.
 pub(crate) fn on_app_commands(cx: &mut App) {
     cx.on_action(|_: &About, _| shared_application().orderFrontStandardAboutPanel(None));
     cx.on_action(|_: &Close, _| {
