@@ -2,16 +2,17 @@ use bank_holidays::{BankHoliday, Calendar, Next};
 use chrono::{Datelike as _, NaiveDate};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme, IconName, StyledExt as _, Theme, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, div, px,
 };
 
+use crate::selection::Move;
 use crate::{BankHolidays, FULL_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
-const MONTHS_IN_YEAR: i32 = 12;
 const SIDEBAR_WIDTH: f32 = 270.;
 const YEAR_WIDTH: f32 = 40.;
 
@@ -23,6 +24,13 @@ enum Dot {
     Predicted,
 }
 
+/// How a row of the list is drawn.
+struct RowLook {
+    dot: Option<Dot>,
+    past: bool,
+    selected: bool,
+}
+
 impl BankHolidays {
     pub(crate) fn sidebar(
         &self,
@@ -30,9 +38,10 @@ impl BankHolidays {
         today: NaiveDate,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let selected = self.selection.date;
         let holidays = self
             .holidays
-            .year(self.division, self.month.year())
+            .year(self.division, selected.year())
             .unwrap_or_default();
         v_flex()
             .w(px(SIDEBAR_WIDTH))
@@ -42,39 +51,63 @@ impl BankHolidays {
             .border_r_1()
             .border_color(cx.theme().sidebar_border)
             .children(calendar.next(today).map(|next| next_holiday(&next, cx)))
-            .child(self.year_stepper(cx))
+            .child(self.year_stepper(calendar, cx))
             .child(
-                v_flex()
-                    .id("holidays")
+                div()
+                    .relative()
                     .flex_1()
                     .min_h_0()
-                    .p_1p5()
-                    .gap_px()
-                    .children(holidays.iter().enumerate().map(|(index, holiday)| {
-                        row(holiday, dot(calendar, holiday), today, cx)
-                            .id(("holiday", index))
-                            .on_click(Self::select_on_click(holiday.date, cx))
-                    }))
-                    .overflow_y_scrollbar(),
+                    .child(
+                        v_flex()
+                            .id("holidays")
+                            .track_scroll(&self.holiday_list)
+                            .size_full()
+                            .p_1p5()
+                            .gap_px()
+                            .overflow_y_scroll()
+                            .children(holidays.iter().enumerate().map(|(index, holiday)| {
+                                let look = RowLook {
+                                    dot: dot(calendar, holiday),
+                                    past: holiday.date < today,
+                                    selected: holiday.date == selected,
+                                };
+                                row(holiday, &look, cx)
+                                    .id(("holiday", index))
+                                    .on_click(Self::select_on_click(holiday.date, cx))
+                            })),
+                    )
+                    .vertical_scrollbar(&self.holiday_list),
             )
     }
 
-    fn year_stepper(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn year_stepper(&self, calendar: &Calendar, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .justify_center()
             .gap_1()
             .p_1p5()
             .border_b_1()
             .border_color(cx.theme().sidebar_border)
-            .child(self.step_button("previous-year", IconName::ChevronLeft, -MONTHS_IN_YEAR, cx))
+            .child(self.step_button(
+                "previous-year",
+                IconName::ChevronLeft,
+                Move::Years(-1),
+                calendar,
+                cx,
+            ))
             .child(
                 div()
                     .min_w(px(YEAR_WIDTH))
                     .text_center()
                     .font_semibold()
-                    .child(self.month.year().to_string()),
+                    .child(self.selection.date.year().to_string()),
             )
-            .child(self.step_button("next-year", IconName::ChevronRight, MONTHS_IN_YEAR, cx))
+            .child(self.step_button(
+                "next-year",
+                IconName::ChevronRight,
+                Move::Years(1),
+                calendar,
+                cx,
+            ))
     }
 }
 
@@ -161,9 +194,9 @@ fn next_marks(next: &Next) -> Option<&'static str> {
     }
 }
 
-fn row(holiday: &BankHoliday, dot: Option<Dot>, today: NaiveDate, cx: &App) -> Div {
+fn row(holiday: &BankHoliday, look: &RowLook, cx: &App) -> Div {
     let theme = cx.theme();
-    let colour = if holiday.date < today {
+    let colour = if look.past {
         theme.muted_foreground
     } else {
         theme.foreground
@@ -172,8 +205,10 @@ fn row(holiday: &BankHoliday, dot: Option<Dot>, today: NaiveDate, cx: &App) -> D
         .gap_2()
         .px_2()
         .py_1p5()
+        .rounded_md()
         .text_sm()
         .text_color(colour)
+        .when(look.selected, |row| row.bg(theme.sidebar_accent))
         .child(
             div()
                 .w(px(DATE_COLUMN_WIDTH))
@@ -182,7 +217,7 @@ fn row(holiday: &BankHoliday, dot: Option<Dot>, today: NaiveDate, cx: &App) -> D
                 .child(holiday.date.format("%-d %b").to_string()),
         )
         .child(div().flex_1().min_w_0().child(holiday.name.clone()))
-        .child(dot_mark(dot, colour, theme))
+        .child(dot_mark(look.dot, colour, theme))
 }
 
 #[cfg(test)]
