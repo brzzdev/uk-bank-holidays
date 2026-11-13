@@ -2,7 +2,7 @@ mod sidebar;
 
 use std::process;
 
-use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
+use bank_holidays::{Division, Holidays, merge, snapshot};
 use chrono::{Datelike, Local};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::{ActiveTheme, Theme, TitleBar, h_flex, v_flex};
@@ -62,8 +62,6 @@ impl BankHolidays {
 
 impl Render for BankHolidays {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let today = Local::now().date_naive();
-        let calendar = Calendar::new(&self.holidays, self.division);
         v_flex()
             .size_full()
             .bg(cx.theme().background)
@@ -73,7 +71,7 @@ impl Render for BankHolidays {
                 h_flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.sidebar(&calendar, today, cx))
+                    .child(self.sidebar(cx))
                     .child(div().flex_1()),
             )
     }
