@@ -145,7 +145,7 @@ impl<'a> Calendar<'a> {
     }
 
     /// The bridge that books a day.
-    fn bridge(&self, date: NaiveDate) -> Option<&Bridge> {
+    fn bridge_booked_on(&self, date: NaiveDate) -> Option<&Bridge> {
         if is_weekend(date) {
             return None;
         }
@@ -172,7 +172,7 @@ impl<'a> Calendar<'a> {
         if self.four_day_weekend(date).is_some() {
             return Day::FourDayWeekend;
         }
-        if self.bridge(date).is_some() {
+        if self.bridge_booked_on(date).is_some() {
             return Day::Bridge;
         }
         Day::Ordinary

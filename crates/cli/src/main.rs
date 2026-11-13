@@ -298,27 +298,28 @@ mod tests {
     use bank_holidays::{DatedFeed, Feed};
 
     /// Bank holidays published for Easter and Christmas 2025 and for 2026, with Northern
-    /// Ireland's own two in 2025, and predicted ones from 2027.
+    /// Ireland's own two in 2025, no Easter Monday in Scotland, and predicted ones from 2027.
     fn fixture(current_year: i32) -> Holidays {
         fn event(date: &str, title: &str) -> serde_json::Value {
             serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
         }
         let shared = [
             event("2025-04-18", "Good Friday"),
-            event("2025-04-21", "Easter Monday"),
             event("2025-12-25", "Christmas Day"),
             event("2025-12-26", "Boxing Day"),
             event("2026-01-01", "New Year’s Day"),
             event("2026-12-25", "Christmas Day"),
             event("2026-12-28", "Boxing Day"),
         ];
+        let mut england_and_wales = vec![event("2025-04-21", "Easter Monday")];
+        england_and_wales.extend(shared.clone());
         let mut northern_ireland = vec![
             event("2025-03-17", "St Patrick’s Day"),
             event("2025-07-14", "Battle of the Boyne (Orangemen’s Day)"),
         ];
-        northern_ireland.extend(shared.clone());
+        northern_ireland.extend(england_and_wales.clone());
         let json = serde_json::json!({
-            "england-and-wales": {"events": shared},
+            "england-and-wales": {"events": england_and_wales},
             "northern-ireland": {"events": northern_ireland},
             "scotland": {"events": shared},
         });
