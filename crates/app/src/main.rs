@@ -243,6 +243,7 @@ impl BankHolidays {
         TitleBar::new().child(div()).child(
             TabBar::new("divisions")
                 .segmented()
+                .small()
                 .mr_2()
                 .selected_index(selected)
                 .on_click(cx.listener(|this, &index: &usize, _, cx| {
