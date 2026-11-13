@@ -52,8 +52,13 @@ pub(crate) fn detail(calendar: &Calendar, date: NaiveDate, today: NaiveDate) -> 
         lines: calendar
             .next(date)
             .map(|next| {
+                let predicted = if next.holiday.predicted {
+                    " (predicted)"
+                } else {
+                    ""
+                };
                 format!(
-                    "Next bank holiday: {}, {}",
+                    "Next bank holiday: {}, {}{predicted}",
                     next.holiday.name,
                     next.holiday.date.format(FULL_DATE)
                 )
@@ -166,6 +171,17 @@ mod tests {
                     "Next bank holiday: Christmas Day, Thursday 25 December 2025".to_owned()
                 ],
             },
+        );
+    }
+
+    #[test]
+    fn an_ordinary_day_says_when_the_next_bank_holiday_is_predicted() {
+        let holidays = holidays();
+        let year = *holidays.years(Division::EnglandAndWales).end();
+        let next = &detail_on(&holidays, &format!("{year}-02-01"), "2026-06-01").lines[0];
+        assert!(
+            next.starts_with("Next bank holiday: Good Friday, ") && next.ends_with(" (predicted)"),
+            "{next}",
         );
     }
 }
