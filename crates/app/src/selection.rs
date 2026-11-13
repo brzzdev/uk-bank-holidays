@@ -185,14 +185,19 @@ mod tests {
     fn the_next_bank_holiday_after_a_years_last_is_new_years_day_even_when_predicted() {
         let holidays = holidays();
         let last = *holidays.years(Division::EnglandAndWales).end();
-        let from = holidays
-            .year(Division::EnglandAndWales, last - 1)
-            .and_then(<[_]>::last)
-            .expect("every available year has bank holidays")
+        let year = |year| {
+            holidays
+                .year(Division::EnglandAndWales, year)
+                .expect("every available year has bank holidays")
+        };
+        let from = year(last - 1)
+            .last()
+            .expect("a year has bank holidays")
             .date;
+        let new_years_day = year(last).first().expect("a year has bank holidays").date;
         assert_eq!(
             walk(&holidays, from, &[Move::NextBankHoliday]),
-            [NaiveDate::from_ymd_opt(last, 1, 1).expect("1 Jan exists")],
+            [new_years_day],
         );
     }
 
