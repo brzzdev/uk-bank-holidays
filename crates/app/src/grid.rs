@@ -4,7 +4,7 @@ use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, ThemeColor
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, Background, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    Stateful, StatefulInteractiveElement as _, Styled, div, pattern_slash, px, transparent_black,
+    Stateful, StatefulInteractiveElement as _, Styled, div, pattern_slash, px,
 };
 
 use crate::detail::detail;
@@ -181,8 +181,9 @@ fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hs
     area.map_or(base, |area| base.blend(area_tint(theme, area)))
 }
 
-/// The selected day's own colour, since `accent` alone barely differs from a plain cell.
-fn selection_outline(theme: &ThemeColor) -> Hsla {
+/// The edge of a shape too faint to tell from the window alone: the selected day's `accent`, and
+/// the legend's shading swatches.
+fn outline(theme: &ThemeColor) -> Hsla {
     theme.muted_foreground
 }
 
@@ -262,11 +263,8 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .h(px(CELL_HEIGHT))
         .rounded(px(CELL_RADIUS))
         .text_sm()
-        .border_2()
-        .border_color(if look.selected {
-            selection_outline(theme)
-        } else {
-            transparent_black()
+        .when(look.selected, |cell| {
+            cell.border_2().border_color(outline(theme))
         })
         .bg(cell_background(theme, look.selected, look.area))
         .child(shading)
@@ -275,6 +273,13 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
 fn legend(cx: &App) -> Div {
     let theme = cx.theme();
     let swatch = || div().flex_none().size(px(LEGEND_SWATCH_SIZE));
+    let shading_swatch = |area| {
+        swatch()
+            .rounded_sm()
+            .border_1()
+            .border_color(outline(theme))
+            .bg(area_tint(theme, area))
+    };
     let entry = |swatch: Div, label: &'static str| h_flex().gap_1().child(swatch).child(label);
     h_flex()
         .gap_3()
@@ -290,16 +295,11 @@ fn legend(cx: &App) -> Div {
             "Predicted",
         ))
         .child(entry(
-            swatch()
-                .rounded_sm()
-                .bg(area_tint(theme, Area::FourDayWeekend)),
+            shading_swatch(Area::FourDayWeekend),
             "Four-day weekend",
         ))
         .child(entry(
-            swatch()
-                .rounded_sm()
-                .bg(area_tint(theme, Area::Bridge))
-                .child(div().size_full().bg(bridge_pattern(theme))),
+            shading_swatch(Area::Bridge).child(div().size_full().bg(bridge_pattern(theme))),
             "Bridge",
         ))
 }
@@ -367,6 +367,12 @@ mod tests {
         });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
+            let ratio = contrast(outline(&theme), theme.background);
+            if ratio < GRAPHIC_CONTRAST {
+                failures.push(format!(
+                    "{appearance}: outline on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
+                ));
+            }
             for (selected, area, disc, overflow) in looks.clone() {
                 // A bridge books working days, so it never holds a bank holiday's disc.
                 if area == Some(Area::Bridge) && disc.is_some() {
@@ -395,12 +401,10 @@ mod tests {
                     ),
                 ];
                 if selected {
-                    let outline = selection_outline(&theme);
-                    checks.push(("selection outline", outline, behind, GRAPHIC_CONTRAST));
                     checks.push((
-                        "selection outline on the window",
-                        outline,
-                        theme.background,
+                        "selection outline",
+                        outline(&theme),
+                        behind,
                         GRAPHIC_CONTRAST,
                     ));
                 }
