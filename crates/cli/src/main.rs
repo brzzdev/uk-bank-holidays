@@ -4,7 +4,9 @@ use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-use bank_holidays::{BankHoliday, Division, Holidays, load, merge, snapshot};
+use bank_holidays::{
+    BankHoliday, Bridge, Calendar, Division, Holidays, Span, load, merge, snapshot,
+};
 use chrono::{Datelike, Local, NaiveDate};
 use lexopt::prelude::*;
 
@@ -111,6 +113,7 @@ fn run(
         Err(error) => return Outcome::failure(USAGE_ERROR, error),
     };
     let division = options.division;
+    let calendar = Calendar::new(holidays, division);
     match options.command {
         Command::Help => Outcome::success(HELP.to_owned()),
         Command::List(year) => {
@@ -130,19 +133,26 @@ fn run(
                 Format::Json => pretty(
                     &year_holidays
                         .iter()
-                        .map(|holiday| to_json(holiday, division))
+                        .map(|holiday| to_json(holiday, division, &calendar))
                         .collect(),
                 ),
                 Format::Text => year_holidays
                     .iter()
                     .fold(String::new(), |mut text, holiday| {
-                        let _ = writeln!(
+                        let _ = write!(
                             text,
                             "{}  {}{}",
                             holiday.date.format("%a %e %b"),
                             holiday.name,
-                            predicted_marker(holiday)
+                            predicted_marker(holiday.predicted)
                         );
+                        if calendar.four_day_weekend(holiday.date).is_some() {
+                            text.push_str(" · four-day weekend");
+                        }
+                        if let Some(bridge) = calendar.bridge_after(holiday.date) {
+                            let _ = write!(text, " · {}", bridge_text(bridge));
+                        }
+                        text.push('\n');
                         text
                     }),
             })
@@ -155,17 +165,21 @@ fn run(
                 );
             };
             Outcome::success(match options.format {
-                Format::Json => pretty(&to_json(next.holiday, division)),
+                Format::Json => pretty(&to_json(next.holiday, division, &calendar)),
                 Format::Text => {
                     let countdown = match next.days {
                         0 => "today".to_owned(),
-                        1 => "in 1 day".to_owned(),
-                        days => format!("in {days} days"),
+                        days => format!("in {}", day_count(days)),
+                    };
+                    let four_day_weekend = if calendar.starts_four_day_weekend(next.holiday.date) {
+                        ", four-day weekend"
+                    } else {
+                        ""
                     };
                     format!(
-                        "{}{}, {}, {countdown}\n",
+                        "{}{}, {}, {countdown}{four_day_weekend}\n",
                         next.holiday.name,
-                        predicted_marker(next.holiday),
+                        predicted_marker(next.holiday.predicted),
                         next.holiday.date.format("%A %-d %B %Y"),
                     )
                 }
@@ -209,21 +223,61 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
     })
 }
 
-fn predicted_marker(holiday: &BankHoliday) -> &'static str {
-    if holiday.predicted {
-        " (predicted)"
-    } else {
-        ""
+/// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)"
+fn bridge_text(bridge: &Bridge) -> String {
+    format!(
+        "Book {} ({}), get {} off ({}){}",
+        day_count(bridge.days_booked),
+        span_text(bridge.booked),
+        bridge.off.days().count(),
+        span_text(bridge.off),
+        predicted_marker(bridge.predicted),
+    )
+}
+
+fn day_count(days: impl Into<i64>) -> String {
+    match days.into() {
+        1 => "1 day".to_owned(),
+        days => format!("{days} days"),
     }
 }
 
-fn to_json(holiday: &BankHoliday, division: Division) -> serde_json::Value {
-    serde_json::json!({
+fn predicted_marker(predicted: bool) -> &'static str {
+    if predicted { " (predicted)" } else { "" }
+}
+
+/// "2 Jan", "29–31 Dec" or "25 Dec – 1 Jan"
+fn span_text(span: Span) -> String {
+    let last = span.last.format("%-d %b");
+    if span.first == span.last {
+        last.to_string()
+    } else if (span.first.year(), span.first.month()) == (span.last.year(), span.last.month()) {
+        format!("{}–{last}", span.first.format("%-d"))
+    } else {
+        format!("{} – {last}", span.first.format("%-d %b"))
+    }
+}
+
+fn span_json(span: Span, days: usize) -> serde_json::Value {
+    serde_json::json!({"days": days, "first": span.first, "last": span.last})
+}
+
+fn to_json(holiday: &BankHoliday, division: Division, calendar: &Calendar) -> serde_json::Value {
+    let mut json = serde_json::json!({
         "date": holiday.date,
         "division": division.key(),
+        "four_day_weekend": calendar.four_day_weekend(holiday.date).is_some(),
         "name": holiday.name,
         "predicted": holiday.predicted,
-    })
+    });
+    if let Some(bridge) = calendar.bridge_after(holiday.date) {
+        json["bridge"] = serde_json::json!({
+            "booked": span_json(bridge.booked, bridge.days_booked.into()),
+            "off": span_json(bridge.off, bridge.off.days().count()),
+            "predicted": bridge.predicted,
+        });
+    }
+    json
 }
 
 fn pretty(value: &serde_json::Value) -> String {
@@ -238,13 +292,15 @@ mod tests {
 
     use bank_holidays::{DatedFeed, Feed};
 
-    /// Bank holidays published for 2025 and 2026, with Northern Ireland's own two in 2025, and
-    /// predicted ones from 2027.
+    /// Bank holidays published for Easter and Christmas 2025 and for 2026, with Northern
+    /// Ireland's own two in 2025, and predicted ones from 2027.
     fn fixture(current_year: i32) -> Holidays {
         fn event(date: &str, title: &str) -> serde_json::Value {
             serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
         }
         let shared = [
+            event("2025-04-18", "Good Friday"),
+            event("2025-04-21", "Easter Monday"),
             event("2025-12-25", "Christmas Day"),
             event("2025-12-26", "Boxing Day"),
             event("2026-01-01", "New Year’s Day"),
@@ -281,7 +337,7 @@ mod tests {
         assert_eq!(outcome.code, 0);
         assert_eq!(
             outcome.stdout,
-            "Christmas Day, Thursday 25 December 2025, in 5 days\n"
+            "Christmas Day, Thursday 25 December 2025, in 5 days, four-day weekend\n"
         );
         assert_eq!(run_on("2025-12-20", &["next"]).stdout, outcome.stdout);
     }
@@ -290,7 +346,7 @@ mod tests {
     fn a_bank_holiday_today_is_today() {
         assert_eq!(
             run_on("2025-12-25", &[]).stdout,
-            "Christmas Day, Thursday 25 December 2025, today\n",
+            "Christmas Day, Thursday 25 December 2025, today, four-day weekend\n",
         );
     }
 
@@ -301,9 +357,11 @@ mod tests {
         assert_eq!(
             outcome.stdout,
             "Mon 17 Mar  St Patrick’s Day\n\
+             Fri 18 Apr  Good Friday · four-day weekend\n\
+             Mon 21 Apr  Easter Monday · four-day weekend\n\
              Mon 14 Jul  Battle of the Boyne (Orangemen’s Day)\n\
-             Thu 25 Dec  Christmas Day\n\
-             Fri 26 Dec  Boxing Day\n",
+             Thu 25 Dec  Christmas Day · four-day weekend\n\
+             Fri 26 Dec  Boxing Day · four-day weekend · Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)\n",
         );
     }
 
@@ -311,7 +369,55 @@ mod tests {
     fn list_defaults_to_the_current_year() {
         let outcome = run_on("2026-06-01", &["list"]);
         assert!(outcome.stdout.starts_with("Thu  1 Jan  New Year’s Day\n"));
-        assert!(outcome.stdout.ends_with("Mon 28 Dec  Boxing Day\n"));
+    }
+
+    #[test]
+    fn list_shows_the_easter_four_day_weekend_and_the_bridge_from_christmas_to_new_year() {
+        let outcome = run_on("2025-01-01", &["list", "2025"]);
+        assert_eq!(
+            outcome.stdout,
+            "Fri 18 Apr  Good Friday · four-day weekend\n\
+             Mon 21 Apr  Easter Monday · four-day weekend\n\
+             Thu 25 Dec  Christmas Day · four-day weekend\n\
+             Fri 26 Dec  Boxing Day · four-day weekend · Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)\n",
+        );
+    }
+
+    #[test]
+    fn a_bridge_to_a_predicted_bank_holiday_is_marked_predicted() {
+        let outcome = run_on("2025-01-01", &["list", "2026"]);
+        assert!(outcome.stdout.ends_with(
+            "Mon 28 Dec  Boxing Day · four-day weekend · \
+             Book 3 days (29–31 Dec), get 10 off (25 Dec – 3 Jan) (predicted)\n"
+        ));
+    }
+
+    #[test]
+    fn list_json_carries_the_bridge_after_a_bank_holiday() {
+        let outcome = run_on("2025-01-01", &["list", "2025", "--json"]);
+        assert_eq!(
+            parsed(&outcome)[3],
+            serde_json::json!({
+                "bridge": {
+                    "booked": {"days": 3, "first": "2025-12-29", "last": "2025-12-31"},
+                    "off": {"days": 8, "first": "2025-12-25", "last": "2026-01-01"},
+                    "predicted": false,
+                },
+                "date": "2025-12-26",
+                "division": "england-and-wales",
+                "four_day_weekend": true,
+                "name": "Boxing Day",
+                "predicted": false,
+            }),
+        );
+    }
+
+    #[test]
+    fn next_says_four_day_weekend_only_for_the_bank_holiday_that_starts_one() {
+        assert_eq!(
+            run_on("2025-04-19", &[]).stdout,
+            "Easter Monday, Monday 21 April 2025, in 2 days\n",
+        );
     }
 
     #[test]
@@ -326,6 +432,7 @@ mod tests {
             serde_json::json!({
                 "date": "2025-03-17",
                 "division": "northern-ireland",
+                "four_day_weekend": false,
                 "name": "St Patrick’s Day",
                 "predicted": false,
             }),
@@ -340,6 +447,7 @@ mod tests {
             serde_json::json!({
                 "date": "2025-12-25",
                 "division": "england-and-wales",
+                "four_day_weekend": true,
                 "name": "Christmas Day",
                 "predicted": false,
             }),
@@ -370,13 +478,14 @@ mod tests {
         assert_eq!(
             outcome.stdout,
             "Fri  1 Jan  New Year’s Day (predicted)\n\
-             Fri 26 Mar  Good Friday (predicted)\n\
-             Mon 29 Mar  Easter Monday (predicted)\n\
+             Fri 26 Mar  Good Friday (predicted) · four-day weekend\n\
+             Mon 29 Mar  Easter Monday (predicted) · four-day weekend\n\
              Mon  3 May  Early May bank holiday (predicted)\n\
              Mon 31 May  Spring bank holiday (predicted)\n\
              Mon 30 Aug  Summer bank holiday (predicted)\n\
-             Mon 27 Dec  Christmas Day (substitute day) (predicted)\n\
-             Tue 28 Dec  Boxing Day (substitute day) (predicted)\n",
+             Mon 27 Dec  Christmas Day (substitute day) (predicted) · four-day weekend\n\
+             Tue 28 Dec  Boxing Day (substitute day) (predicted) · four-day weekend · \
+             Book 3 days (29–31 Dec), get 10 off (25 Dec – 3 Jan) (predicted)\n",
         );
     }
 

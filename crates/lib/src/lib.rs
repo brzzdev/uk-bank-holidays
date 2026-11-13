@@ -1,4 +1,5 @@
 mod cache;
+mod calendar;
 mod division;
 mod error;
 mod feed;
@@ -7,6 +8,7 @@ mod predict;
 mod snapshot;
 
 pub use cache::{BUNDLE_ID, Loaded, load};
+pub use calendar::{Bridge, Calendar, Day, Span};
 pub use division::Division;
 pub use error::Error;
 pub use feed::{DatedFeed, Event, Feed};
