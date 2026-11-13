@@ -2,7 +2,6 @@ use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::io::{self, Write};
-use std::path::Path;
 use std::process::ExitCode;
 
 use bank_holidays::{BankHoliday, Division, Holidays, load, merge, snapshot};
@@ -82,8 +81,8 @@ enum Format {
 fn main() -> ExitCode {
     let now = Local::now();
     let today = now.date_naive();
-    let holidays = match env::var_os("HOME") {
-        Some(home) => load(Path::new(&home), now.into()).holidays,
+    let holidays = match env::home_dir() {
+        Some(home) => load(&home, now.into()).holidays,
         None => merge(&snapshot(), None),
     };
     let outcome = run(
