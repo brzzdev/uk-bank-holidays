@@ -215,6 +215,11 @@ fn outline(theme: &ThemeColor) -> Hsla {
     theme.muted_foreground
 }
 
+/// The edge of a four-day weekend's day, whose tint is too faint to tell from the window alone.
+fn four_day_weekend_edge(theme: &ThemeColor) -> Hsla {
+    theme.red
+}
+
 fn bridge_hatch(theme: &ThemeColor) -> Hsla {
     theme.warning.opacity(BRIDGE_HATCH)
 }
@@ -281,8 +286,12 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .items_center()
         .justify_center()
         .rounded(px(CELL_RADIUS))
-        .when(look.area == Some(Area::Bridge), |shading| {
-            shading.bg(bridge_pattern(theme))
+        .map(|shading| match look.area {
+            Some(Area::Bridge) => shading.bg(bridge_pattern(theme)),
+            Some(Area::FourDayWeekend) => shading
+                .border_1()
+                .border_color(four_day_weekend_edge(theme)),
+            None => shading,
         })
         .child(ring);
     div()
@@ -311,10 +320,14 @@ fn legend(cx: &App) -> Div {
     let theme = cx.theme();
     let swatch = || div().flex_none().size(px(LEGEND_SWATCH_SIZE));
     let shading_swatch = |area| {
+        let edge = match area {
+            Area::Bridge => outline(theme),
+            Area::FourDayWeekend => four_day_weekend_edge(theme),
+        };
         swatch()
             .rounded_sm()
             .border_1()
-            .border_color(outline(theme))
+            .border_color(edge)
             .bg(area_tint(theme, area))
     };
     let entry = |swatch: Div, label: &'static str| h_flex().gap_1().child(swatch).child(label);
@@ -406,11 +419,16 @@ mod tests {
         });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
-            let ratio = contrast(outline(&theme), theme.background);
-            if ratio < GRAPHIC_CONTRAST {
-                failures.push(format!(
-                    "{appearance}: outline on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
-                ));
+            for (edge, colour) in [
+                ("four-day weekend edge", four_day_weekend_edge(&theme)),
+                ("outline", outline(&theme)),
+            ] {
+                let ratio = contrast(colour, theme.background);
+                if ratio < GRAPHIC_CONTRAST {
+                    failures.push(format!(
+                        "{appearance}: {edge} on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
+                    ));
+                }
             }
             let ratio = contrast(divider(&theme), theme.background);
             if ratio < DIVIDER_CONTRAST {
