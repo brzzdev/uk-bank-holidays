@@ -275,15 +275,24 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .child(ring);
     div()
         .id(("day", index))
+        .relative()
         .flex_1()
         .h(px(CELL_HEIGHT))
         .rounded(px(CELL_RADIUS))
         .text_sm()
-        .when(look.selected, |cell| {
-            cell.border_2().border_color(outline(theme))
-        })
         .bg(cell_background(theme, look.selected, look.area))
         .child(shading)
+        .when(look.selected, |cell| {
+            // Out of the flow, so the outline never widens the cell at its week's expense.
+            cell.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(CELL_RADIUS))
+                    .border_2()
+                    .border_color(outline(theme)),
+            )
+        })
 }
 
 fn legend(cx: &App) -> Div {
