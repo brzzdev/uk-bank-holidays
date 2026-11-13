@@ -342,7 +342,7 @@ fn first_of_month(date: NaiveDate) -> NaiveDate {
     date.with_day(1).expect("every month has a first day")
 }
 
-/// The rule between two areas: gpui-kit's `border` is too faint to see on the window.
+/// The rule between two panes: gpui-kit's `border` is too faint to see on the window.
 fn divider(theme: &ThemeColor) -> Hsla {
     theme.border.blend(theme.foreground.opacity(DIVIDER_LIFT))
 }

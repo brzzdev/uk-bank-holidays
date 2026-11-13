@@ -288,10 +288,11 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .rounded(px(CELL_RADIUS))
         .map(|shading| match look.area {
             Some(Area::Bridge) => shading.bg(bridge_pattern(theme)),
-            Some(Area::FourDayWeekend) => shading
+            // A selected day's outline is its edge, and leaves no room for this one round today's ring.
+            Some(Area::FourDayWeekend) if !look.selected => shading
                 .border_1()
                 .border_color(four_day_weekend_edge(theme)),
-            None => shading,
+            Some(Area::FourDayWeekend) | None => shading,
         })
         .child(ring);
     div()
@@ -360,7 +361,7 @@ mod tests {
 
     use gpui_kit::Rgba;
 
-    /// A divider separates areas without carrying meaning, so it needs less than WCAG's 3:1.
+    /// A divider separates panes without carrying meaning, so it needs less than WCAG's 3:1.
     const DIVIDER_CONTRAST: f32 = 1.5;
     /// WCAG's minimum for graphics.
     const GRAPHIC_CONTRAST: f32 = 3.;
@@ -402,6 +403,41 @@ mod tests {
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
 
+    #[test]
+    fn every_edge_and_divider_stands_out_from_the_surface_behind_it_in_light_and_dark() {
+        let mut failures = Vec::new();
+        for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
+            let edges = [
+                ("four-day weekend edge", four_day_weekend_edge(&theme)),
+                ("outline", outline(&theme)),
+            ]
+            .map(|(mark, colour)| (mark, colour, "window", theme.background, GRAPHIC_CONTRAST));
+            let dividers = [
+                ("sidebar", theme.sidebar),
+                ("title bar", theme.title_bar),
+                ("window", theme.background),
+            ]
+            .map(|(surface, behind)| {
+                (
+                    "divider",
+                    divider(&theme),
+                    surface,
+                    behind,
+                    DIVIDER_CONTRAST,
+                )
+            });
+            for (mark, colour, surface, behind, minimum) in edges.into_iter().chain(dividers) {
+                let ratio = contrast(colour, behind);
+                if ratio < minimum {
+                    failures.push(format!(
+                        "{appearance}: {mark} on the {surface} is {ratio:.2}, under {minimum}"
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     /// The four-day weekend tint and the bridge hatching are shading the legend names, so they're
     /// checked as backgrounds for the marks on them, not against a plain cell.
     #[test]
@@ -419,22 +455,6 @@ mod tests {
         });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
-            for (mark, colour, minimum) in [
-                ("divider", divider(&theme), DIVIDER_CONTRAST),
-                (
-                    "four-day weekend edge",
-                    four_day_weekend_edge(&theme),
-                    GRAPHIC_CONTRAST,
-                ),
-                ("outline", outline(&theme), GRAPHIC_CONTRAST),
-            ] {
-                let ratio = contrast(colour, theme.background);
-                if ratio < minimum {
-                    failures.push(format!(
-                        "{appearance}: {mark} on the window is {ratio:.2}, under {minimum}"
-                    ));
-                }
-            }
             for (selected, area, disc, overflow) in looks.clone() {
                 // A bridge books working days, so it never holds a bank holiday's disc.
                 if area == Some(Area::Bridge) && disc.is_some() {
