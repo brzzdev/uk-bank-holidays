@@ -1,18 +1,17 @@
 use bank_holidays::{BankHoliday, Calendar, Next};
-use chrono::NaiveDate;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use chrono::{Datelike as _, NaiveDate};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{
-    ActiveTheme, Disableable as _, IconName, Sizable as _, StyledExt as _, Theme, h_flex, v_flex,
-};
+use gpui_kit::component::{ActiveTheme, IconName, StyledExt as _, Theme, h_flex, v_flex};
 use gpui_kit::{
-    App, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled, div, px,
+    App, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled, div, px,
 };
 
-use crate::BankHolidays;
+use crate::{BankHolidays, FULL_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
+const MONTHS_IN_YEAR: i32 = 12;
 const SIDEBAR_WIDTH: f32 = 270.;
 const YEAR_WIDTH: f32 = 40.;
 
@@ -25,11 +24,15 @@ enum Dot {
 }
 
 impl BankHolidays {
-    pub(crate) fn sidebar(&self, today: NaiveDate, cx: &mut Context<Self>) -> impl IntoElement {
-        let calendar = Calendar::new(&self.holidays, self.division);
+    pub(crate) fn sidebar(
+        &self,
+        calendar: &Calendar,
+        today: NaiveDate,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let holidays = self
             .holidays
-            .year(self.division, self.year)
+            .year(self.division, self.month.year())
             .unwrap_or_default();
         v_flex()
             .w(px(SIDEBAR_WIDTH))
@@ -47,43 +50,13 @@ impl BankHolidays {
                     .min_h_0()
                     .p_1p5()
                     .gap_px()
-                    .children(
-                        holidays
-                            .iter()
-                            .map(|holiday| row(holiday, dot(&calendar, holiday), today, cx)),
-                    )
+                    .children(holidays.iter().enumerate().map(|(index, holiday)| {
+                        row(holiday, dot(calendar, holiday), today, cx)
+                            .id(("holiday", index))
+                            .on_click(Self::select_on_click(holiday.date, cx))
+                    }))
                     .overflow_y_scrollbar(),
             )
-    }
-
-    fn step_button(
-        &self,
-        id: &'static str,
-        icon: IconName,
-        step: i32,
-        cx: &mut Context<Self>,
-    ) -> Button {
-        Button::new(id)
-            .ghost()
-            .small()
-            .tab_stop(false)
-            .icon(icon)
-            .disabled(self.stepped_year(step).is_none())
-            .on_click(cx.listener(move |this, _, _, cx| {
-                if let Some(year) = this.stepped_year(step) {
-                    this.year = year;
-                    cx.notify();
-                }
-            }))
-    }
-
-    /// The year a step lands on, while it's in the available year range.
-    fn stepped_year(&self, step: i32) -> Option<i32> {
-        let year = self.year + step;
-        self.holidays
-            .years(self.division)
-            .contains(&year)
-            .then_some(year)
     }
 
     fn year_stepper(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -93,15 +66,15 @@ impl BankHolidays {
             .p_1p5()
             .border_b_1()
             .border_color(cx.theme().sidebar_border)
-            .child(self.step_button("previous-year", IconName::ChevronLeft, -1, cx))
+            .child(self.step_button("previous-year", IconName::ChevronLeft, -MONTHS_IN_YEAR, cx))
             .child(
                 div()
                     .min_w(px(YEAR_WIDTH))
                     .text_center()
                     .font_semibold()
-                    .child(self.year.to_string()),
+                    .child(self.month.year().to_string()),
             )
-            .child(self.step_button("next-year", IconName::ChevronRight, 1, cx))
+            .child(self.step_button("next-year", IconName::ChevronRight, MONTHS_IN_YEAR, cx))
     }
 }
 
@@ -112,7 +85,7 @@ fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
     if calendar.four_day_weekend(holiday.date).is_some() {
         return Some(Dot::FourDayWeekend);
     }
-    if calendar.joins_bridge(holiday.date) {
+    if calendar.bridges_joined(holiday.date).next().is_some() {
         return Some(Dot::Bridge);
     }
     None
@@ -156,7 +129,7 @@ fn next_holiday(next: &Next, cx: &App) -> Div {
                         .text_color(theme.foreground)
                         .child(next.holiday.name.clone()),
                 )
-                .child(next.holiday.date.format("%A %-d %B %Y").to_string())
+                .child(next.holiday.date.format(FULL_DATE).to_string())
                 .children(next_marks(next)),
         )
         .child(
@@ -217,7 +190,6 @@ mod tests {
     use super::*;
 
     use bank_holidays::{Division, merge, snapshot};
-    use chrono::Datelike as _;
 
     #[test]
     fn a_row_is_dotted_for_a_prediction_before_a_four_day_weekend_before_a_bridge() {
@@ -241,20 +213,5 @@ mod tests {
                 .iter()
                 .all(|holiday| dot(&calendar, holiday) == Some(Dot::Predicted))
         );
-    }
-
-    #[test]
-    fn stepping_the_year_stops_at_the_ends_of_the_available_range() {
-        let holidays = merge(&snapshot(), None).with_predictions(2026);
-        let years = holidays.years(Division::EnglandAndWales);
-        let mut app = BankHolidays {
-            division: Division::EnglandAndWales,
-            holidays,
-            year: *years.end(),
-        };
-        assert_eq!(app.stepped_year(1), None);
-        assert_eq!(app.stepped_year(-1), Some(*years.end() - 1));
-        app.year = *years.start();
-        assert_eq!(app.stepped_year(-1), None);
     }
 }
