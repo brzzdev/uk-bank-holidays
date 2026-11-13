@@ -55,6 +55,18 @@ impl Selection {
             .contains(&date.year())
             .then_some(Self { date, month_day })
     }
+
+    /// Moves a selection outside the calendar's years into the nearest year it has, as a year move.
+    pub(crate) fn kept_in(self, calendar: &Calendar) -> Self {
+        let years = calendar.years();
+        let year = self.date.year();
+        if years.contains(&year) {
+            return self;
+        }
+        let nearest = year.clamp(*years.start(), *years.end());
+        self.moved(Move::Years(nearest - year), calendar)
+            .expect("a move to a year in the calendar's range stays in it")
+    }
 }
 
 /// Clamps the day to the end of a shorter month.
@@ -199,6 +211,26 @@ mod tests {
             walk(&holidays, from, &[Move::NextBankHoliday]),
             [new_years_day],
         );
+    }
+
+    #[test]
+    fn a_selection_outside_the_years_moves_to_the_nearest_year_keeping_the_date() {
+        let holidays = holidays();
+        let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
+        let years = calendar.years();
+        let in_year = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day).expect("test dates are valid")
+        };
+        let kept = |date| Selection::new(date).kept_in(&calendar).date;
+        assert_eq!(
+            kept(in_year(years.start() - 3, 6, 15)),
+            in_year(*years.start(), 6, 15),
+        );
+        assert_eq!(
+            kept(in_year(years.end() + 3, 6, 15)),
+            in_year(*years.end(), 6, 15),
+        );
+        assert_eq!(kept(date("2026-06-15")), date("2026-06-15"));
     }
 
     #[test]

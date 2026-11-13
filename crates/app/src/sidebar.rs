@@ -1,5 +1,5 @@
 use bank_holidays::{BankHoliday, Calendar, Next};
-use chrono::{Datelike as _, NaiveDate};
+use chrono::{Datelike as _, NaiveDate, TimeDelta};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme, IconName, StyledExt as _, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -9,11 +9,15 @@ use gpui_kit::{
 };
 
 use crate::selection::Move;
-use crate::{BankHolidays, FULL_DATE};
+use crate::{BankHolidays, FULL_DATE, SHORT_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
+/// "25 Dec 2025"
+const SHORT_DATE_WITH_YEAR: &str = "%-d %b %Y";
 const SIDEBAR_WIDTH: f32 = 270.;
+/// The age past which the data counts as gov.uk being unreachable.
+const UNREACHABLE_AFTER: TimeDelta = TimeDelta::days(30);
 const YEAR_WIDTH: f32 = 40.;
 
 /// The one mark a row of the list carries.
@@ -78,6 +82,15 @@ impl BankHolidays {
                     )
                     .vertical_scrollbar(&self.holiday_list),
             )
+            .children(unreachable_note(self.holidays.as_of(), today).map(|note| {
+                div()
+                    .p_3()
+                    .border_t_1()
+                    .border_color(cx.theme().sidebar_border)
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(note)
+            }))
     }
 
     fn year_stepper(&self, calendar: &Calendar, cx: &mut Context<Self>) -> impl IntoElement {
@@ -109,6 +122,21 @@ impl BankHolidays {
                 cx,
             ))
     }
+}
+
+fn unreachable_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
+    if today - as_of <= UNREACHABLE_AFTER {
+        return None;
+    }
+    let format = if as_of.year() == today.year() {
+        SHORT_DATE
+    } else {
+        SHORT_DATE_WITH_YEAR
+    };
+    Some(format!(
+        "Couldn't reach gov.uk since {}",
+        as_of.format(format)
+    ))
 }
 
 fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
@@ -214,7 +242,7 @@ fn row(holiday: &BankHoliday, look: &RowLook, cx: &App) -> Div {
                 .w(px(DATE_COLUMN_WIDTH))
                 .flex_none()
                 .text_color(theme.muted_foreground)
-                .child(holiday.date.format("%-d %b").to_string()),
+                .child(holiday.date.format(SHORT_DATE).to_string()),
         )
         .child(div().flex_1().min_w_0().child(holiday.name.clone()))
         .child(dot_mark(look.dot, colour, theme))
@@ -226,14 +254,36 @@ mod tests {
 
     use bank_holidays::{Division, merge, snapshot};
 
+    fn date(s: &str) -> NaiveDate {
+        s.parse().expect("test dates are valid")
+    }
+
+    #[test]
+    fn the_unreachable_note_shows_once_the_data_is_more_than_30_days_old() {
+        let as_of = date("2026-10-01");
+        assert_eq!(unreachable_note(as_of, date("2026-10-31")), None);
+        assert_eq!(
+            unreachable_note(as_of, date("2026-11-01")).as_deref(),
+            Some("Couldn't reach gov.uk since 1 Oct"),
+        );
+    }
+
+    #[test]
+    fn the_unreachable_note_names_the_year_once_it_differs_from_this_one() {
+        assert_eq!(
+            unreachable_note(date("2025-10-01"), date("2026-01-15")).as_deref(),
+            Some("Couldn't reach gov.uk since 1 Oct 2025"),
+        );
+    }
+
     #[test]
     fn a_row_is_dotted_for_a_prediction_before_a_four_day_weekend_before_a_bridge() {
         let holidays = merge(&snapshot(), None).with_predictions(2026);
         let division = Division::EnglandAndWales;
         let calendar = Calendar::new(&holidays, division);
         let year = |year| holidays.year(division, year).unwrap_or_default();
-        let dot_on = |date: &str| {
-            let date: NaiveDate = date.parse().expect("test dates are valid");
+        let dot_on = |day: &str| {
+            let date = date(day);
             let holiday = year(date.year())
                 .iter()
                 .find(|holiday| holiday.date == date)

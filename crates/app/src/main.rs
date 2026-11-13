@@ -1,11 +1,13 @@
 mod detail;
 mod grid;
 mod menus;
+mod refresh;
 mod selection;
 mod sidebar;
 
-use std::process;
+use std::path::PathBuf;
 use std::time::Duration;
+use std::{env, process};
 
 use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
 use chrono::{Datelike, Local, NaiveDate, TimeDelta};
@@ -55,22 +57,37 @@ const DIVISIONS: [(Division, &str); 3] = [
 ];
 /// "Thursday 25 December 2025"
 const FULL_DATE: &str = "%A %-d %B %Y";
+/// "25 Dec"
+const SHORT_DATE: &str = "%-d %b";
 const WINDOW_HEIGHT: f32 = 600.;
 const WINDOW_WIDTH: f32 = 880.;
 
 struct BankHolidays {
     division: Division,
+    fetching: bool,
     focus: FocusHandle,
     holiday_list: ScrollHandle,
     holidays: Holidays,
+    home: Option<PathBuf>,
     selection: Selection,
 }
 
 impl BankHolidays {
-    fn new(today: NaiveDate, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        today: NaiveDate,
+        home: Option<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Theme::sync_system_appearance(Some(window), cx);
         cx.observe_window_appearance(window, |_, window, cx| {
             Theme::sync_system_appearance(Some(window), cx);
+        })
+        .detach();
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
+                this.refresh(cx);
+            }
         })
         .detach();
         Self::redraw_on_a_new_day(today, cx);
@@ -81,13 +98,17 @@ impl BankHolidays {
             this.scroll_to_selected_row();
             cx.notify();
         });
-        Self {
+        let mut this = Self {
             division: Division::EnglandAndWales,
+            fetching: false,
             focus,
             holiday_list: ScrollHandle::new(),
             holidays: merge(&snapshot(), None).with_predictions(today.year()),
+            home,
             selection: Selection::new(today),
-        }
+        };
+        this.refresh(cx);
+        this
     }
 
     fn redraw_on_a_new_day(mut shown: NaiveDate, cx: &mut Context<Self>) {
@@ -271,8 +292,9 @@ fn main() {
                 ..TitleBar::window_options()
             };
             let today = clock_today();
+            let home = env::home_dir();
             if let Err(error) = open_window(options, cx, |window, cx| {
-                cx.new(|cx| BankHolidays::new(today, window, cx))
+                cx.new(|cx| BankHolidays::new(today, home, window, cx))
             }) {
                 eprintln!("bank-holidays-app: couldn't open a window: {error}");
                 process::exit(1);
