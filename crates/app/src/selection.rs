@@ -21,7 +21,6 @@ pub(crate) enum Move {
 #[derive(Clone, Copy)]
 pub(crate) struct Selection {
     pub(crate) date: NaiveDate,
-    /// The day of the month a run of month moves began on.
     month_day: Option<u32>,
 }
 

@@ -71,7 +71,7 @@ impl BankHolidays {
             Theme::sync_system_appearance(Some(window), cx);
         })
         .detach();
-        Self::redraw_on_a_new_day(cx);
+        Self::redraw_on_a_new_day(today, cx);
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         // The list can only scroll once its first frame has measured it.
@@ -88,12 +88,11 @@ impl BankHolidays {
         }
     }
 
-    fn redraw_on_a_new_day(cx: &mut Context<Self>) {
+    fn redraw_on_a_new_day(mut shown: NaiveDate, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let mut shown = today();
             loop {
                 cx.background_executor().timer(DATE_CHECK_INTERVAL).await;
-                let now = today();
+                let now = clock_today();
                 if now == shown {
                     continue;
                 }
@@ -159,7 +158,7 @@ impl BankHolidays {
             .on_click(cx.listener(move |this, _, _, cx| this.go(step, cx)))
     }
 
-    /// Registers each command only while it can act, so its availability says whether it can.
+    /// Registers each move command only while its move can be made.
     fn on_commands(
         &self,
         root: Div,
@@ -190,7 +189,7 @@ impl BankHolidays {
                 self.selection.moved(Move::To(today), calendar).is_some(),
                 |root| {
                     root.on_action(cx.listener(|this, _: &Today, _, cx| {
-                        this.go(Move::To(crate::today()), cx);
+                        this.go(Move::To(clock_today()), cx);
                     }))
                 },
             )
@@ -233,7 +232,7 @@ impl BankHolidays {
 
 impl Render for BankHolidays {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let today = today();
+        let today = clock_today();
         let calendar = Calendar::new(&self.holidays, self.division);
         let root = v_flex()
             .track_focus(&self.focus)
@@ -267,7 +266,7 @@ fn main() {
                 ))),
                 ..TitleBar::window_options()
             };
-            let today = today();
+            let today = clock_today();
             if let Err(error) = open_window(options, cx, |window, cx| {
                 cx.new(|cx| BankHolidays::new(today, window, cx))
             }) {
@@ -296,7 +295,7 @@ fn key_bindings() -> [KeyBinding; 14] {
     ]
 }
 
-fn today() -> NaiveDate {
+fn clock_today() -> NaiveDate {
     Local::now().date_naive()
 }
 
