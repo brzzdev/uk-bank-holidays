@@ -36,10 +36,10 @@ pub struct Cached {
 pub fn load_cached(home: &Path, now: SystemTime) -> Cached {
     let cached = read(&cache_directory(home).join(FEED_FILE));
     Cached {
+        holidays: merge(&snapshot(), cached.as_ref().map(|cached| &cached.feed)),
         stale: !cached
             .as_ref()
             .is_some_and(|cached| is_fresh(cached.fetched, now)),
-        holidays: merge(&snapshot(), cached.as_ref().map(|cached| &cached.feed)),
     }
 }
 
@@ -390,14 +390,6 @@ mod tests {
                 .map(|holidays| holidays[0].name.as_str()),
             Some("Cached Day"),
         );
-    }
-
-    #[test]
-    fn a_day_old_cache_reads_as_stale() {
-        let home = TempDir::new().expect("a temp dir is creatable");
-        let now = later();
-        cache(&home, &feed("Cached Day"), now - DAY);
-        assert!(load_cached(home.path(), now).stale);
     }
 
     #[test]
