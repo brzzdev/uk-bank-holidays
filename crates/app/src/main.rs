@@ -6,10 +6,10 @@ mod selection;
 mod sidebar;
 
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::{env, process};
 
-use bank_holidays::{Calendar, Division, Holidays, load_cached, merge, snapshot};
+use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
 use chrono::{Datelike, Local, NaiveDate, TimeDelta};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
@@ -98,23 +98,16 @@ impl BankHolidays {
             this.scroll_to_selected_row();
             cx.notify();
         });
-        let cached = home
-            .as_deref()
-            .map(|home| load_cached(home, SystemTime::now()));
-        let stale = cached.as_ref().is_some_and(|cached| cached.stale);
-        let holidays = cached.map_or_else(|| merge(&snapshot(), None), |cached| cached.holidays);
         let mut this = Self {
             division: Division::EnglandAndWales,
             fetching: false,
             focus,
             holiday_list: ScrollHandle::new(),
-            holidays: holidays.with_predictions(today.year()),
+            holidays: merge(&snapshot(), None).with_predictions(today.year()),
             home,
             selection: Selection::new(today),
         };
-        if stale {
-            this.fetch(cx);
-        }
+        this.refresh(cx);
         this
     }
 

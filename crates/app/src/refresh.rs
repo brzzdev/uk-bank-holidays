@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::SystemTime;
 
-use bank_holidays::{Calendar, Error, Holidays, load, load_cached};
+use bank_holidays::{Calendar, Error, Holidays, Loaded, load, load_cached};
 use chrono::Datelike as _;
 use gpui_kit::Context;
 use gpui_kit::base::async_util::unbounded;
@@ -26,9 +26,7 @@ impl BankHolidays {
         }
     }
 
-    /// A failed fetch leaves the data shown as it was. One whose cache write alone failed still
-    /// brings current data.
-    pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
+    fn fetch(&mut self, cx: &mut Context<Self>) {
         let Some(home) = self.home.clone() else {
             return;
         };
@@ -42,7 +40,7 @@ impl BankHolidays {
             let _ = this.update(cx, |this, cx| {
                 this.fetching = false;
                 if let Ok(loaded) = loaded
-                    && matches!(loaded.failure, None | Some(Error::CacheWrite(_)))
+                    && installs(&loaded)
                 {
                     this.replace_holidays(loaded.holidays, cx);
                 }
@@ -65,21 +63,28 @@ impl BankHolidays {
     }
 }
 
-/// An unchanged cache would only redraw, and an older one is what a fetch that couldn't be
-/// written leaves behind.
+/// An older cache is what a fetch that couldn't be written leaves behind.
 fn replaces(cached: &Holidays, shown: &Holidays) -> bool {
-    cached.as_of() > shown.as_of()
+    cached.as_of() >= shown.as_of()
+}
+
+/// A failed fetch leaves the data shown as it was; one whose cache write alone failed still
+/// brings current data.
+fn installs(loaded: &Loaded) -> bool {
+    matches!(loaded.failure, None | Some(Error::CacheWrite(_)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use bank_holidays::{DatedFeed, merge, snapshot};
+    use std::io;
+
+    use bank_holidays::{DatedFeed, Division, merge, snapshot};
     use chrono::Days;
 
     #[test]
-    fn only_a_cache_newer_than_the_data_shown_replaces_it() {
+    fn a_cache_replaces_the_data_shown_unless_it_is_older() {
         let older = merge(&snapshot(), None);
         let newer_feed = DatedFeed {
             as_of: snapshot().as_of + Days::new(10),
@@ -88,6 +93,21 @@ mod tests {
         let newer = merge(&snapshot(), Some(&newer_feed));
         assert!(replaces(&newer, &older));
         assert!(!replaces(&older, &newer));
-        assert!(!replaces(&newer, &newer));
+        assert!(replaces(&newer, &newer));
+    }
+
+    #[test]
+    fn a_fetch_is_installed_unless_the_fetch_itself_failed() {
+        let loaded = |failure| Loaded {
+            failure,
+            holidays: merge(&snapshot(), None),
+        };
+        assert!(installs(&loaded(None)));
+        assert!(installs(&loaded(Some(Error::CacheWrite(
+            io::Error::other("read-only")
+        )))));
+        assert!(!installs(&loaded(Some(Error::EmptyDivision(
+            Division::Scotland
+        )))));
     }
 }
