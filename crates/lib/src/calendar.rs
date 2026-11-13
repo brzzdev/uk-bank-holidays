@@ -63,10 +63,10 @@ pub struct Bridge {
 /// "Book 3 days (29–31 Dec), get 8 off (25 Dec – 1 Jan)", ending " (predicted)" when predicted
 impl fmt::Display for Bridge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let days = if self.days_booked == 1 { "day" } else { "days" };
+        let unit = if self.days_booked == 1 { "day" } else { "days" };
         write!(
             f,
-            "Book {} {days} ({}), get {} off ({})",
+            "Book {} {unit} ({}), get {} off ({})",
             self.days_booked,
             self.booked,
             self.off.day_count(),
@@ -178,6 +178,12 @@ impl<'a> Calendar<'a> {
         }
     }
 
+    /// The bridge that follows a bank holiday, when it's the last bank holiday before one.
+    #[must_use]
+    pub fn bridge_after(&self, date: NaiveDate) -> Option<&Bridge> {
+        self.bridges.get(&date)
+    }
+
     /// The bridge that books a day.
     #[must_use]
     pub fn bridge_booked_on(&self, date: NaiveDate) -> Option<&Bridge> {
@@ -189,10 +195,12 @@ impl<'a> Calendar<'a> {
             .find(|bridge| bridge.booked.contains(date))
     }
 
-    /// The bridge that follows a bank holiday, when it's the last bank holiday before one.
-    #[must_use]
-    pub fn bridge_after(&self, date: NaiveDate) -> Option<&Bridge> {
-        self.bridges.get(&date)
+    /// The bridges whose stretches of days off hold a day: one leading in, one leading out, or
+    /// both.
+    pub fn bridges_joined(&self, date: NaiveDate) -> impl Iterator<Item = &Bridge> {
+        self.bridges
+            .values()
+            .filter(move |bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
     }
 
     #[must_use]
@@ -225,14 +233,6 @@ impl<'a> Calendar<'a> {
             .iter()
             .copied()
             .find(|weekend| weekend.contains(date))
-    }
-
-    /// The bridges whose stretches of days off hold a day: one leading in, one leading out, or
-    /// both.
-    pub fn bridges_joined(&self, date: NaiveDate) -> impl Iterator<Item = &Bridge> {
-        self.bridges
-            .values()
-            .filter(move |bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
     }
 
     /// The bank holiday on a day.

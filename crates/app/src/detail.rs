@@ -8,7 +8,7 @@ use crate::FULL_DATE;
 pub(crate) struct Detail {
     pub(crate) lines: Vec<String>,
     pub(crate) title: String,
-    /// The date and how far it is from today.
+    /// The date, unless it's the title, and how far it is from today.
     pub(crate) when: String,
 }
 
@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bridge_day_describes_its_bridge() {
+    fn a_day_booked_for_a_bridge_describes_the_bridge() {
         assert_eq!(
             detail_on(&holidays(), "2025-12-29", "2025-12-20"),
             Detail {

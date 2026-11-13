@@ -181,8 +181,7 @@ fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hs
     area.map_or(base, |area| base.blend(area_tint(theme, area)))
 }
 
-/// The edge of a shape too faint to tell from the window alone: the selected day's `accent`, and
-/// the legend's shading swatches.
+/// The edge of a shape too faint to tell from the window alone.
 fn outline(theme: &ThemeColor) -> Hsla {
     theme.muted_foreground
 }
