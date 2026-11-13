@@ -16,7 +16,7 @@ actions!(
 
 const APP_NAME: &str = "Bank Holidays";
 
-/// The whole menu bar. Go's items are greyed by GPUI wherever the window hasn't registered them.
+/// Go's items are greyed by GPUI wherever the window hasn't registered them.
 pub(crate) fn menus() -> [Menu; 4] {
     [
         Menu::new(APP_NAME).items([
