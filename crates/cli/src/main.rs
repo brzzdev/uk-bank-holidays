@@ -1,9 +1,10 @@
+use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-use bank_holidays::{BankHoliday, Division, Holidays, merge, snapshot};
+use bank_holidays::{BankHoliday, Division, Holidays, load, merge, snapshot};
 use chrono::{Datelike, Local, NaiveDate};
 use lexopt::prelude::*;
 
@@ -78,11 +79,16 @@ enum Format {
 }
 
 fn main() -> ExitCode {
-    let today = Local::now().date_naive();
+    let now = Local::now();
+    let today = now.date_naive();
+    let holidays = match env::home_dir() {
+        Some(home) => load(&home, now.into()).holidays,
+        None => merge(&snapshot(), None),
+    };
     let outcome = run(
-        std::env::args_os().skip(1),
+        env::args_os().skip(1),
         today,
-        &merge(&snapshot(), None).with_predictions(today.year()),
+        &holidays.with_predictions(today.year()),
     );
     let mut code = outcome.code;
     let mut stderr = outcome.stderr;
