@@ -15,3 +15,5 @@ workspace = true
 bank-holidays.workspace = true
 chrono.workspace = true
 gpui-kit = "=0.9.1"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSResponder", "NSWindow"] }
