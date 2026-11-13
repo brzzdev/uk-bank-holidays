@@ -10,7 +10,7 @@ format:
 format-check:
     cargo fmt --check
 
-# Build Bank Holidays.app and install it in ~/Applications.
+# Build Bank Holidays.app and install it in /Applications.
 install-app:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -34,7 +34,7 @@ install-app:
     fi
     app="$target/$bundle"
     iconset="$target/AppIcon.iconset"
-    installed="$HOME/Applications/$bundle"
+    installed="/Applications/$bundle"
     plist="$app/Contents/Info.plist"
     rm -rf "$app" "$iconset"
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$iconset"
