@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -40,22 +41,24 @@ fn load_with(
     if let Some(cached) = &cached
         && is_fresh(cached.fetched, now)
     {
-        return loaded(Some(&cached.feed), None);
+        return with_snapshot(Some(&cached.feed), None);
     }
     let fetched = fetch().and_then(|bytes| Ok((Feed::parse(&bytes)?, bytes)));
     let (feed, bytes) = match fetched {
         Ok(fetched) => fetched,
-        Err(error) => return loaded(cached.as_ref().map(|cached| &cached.feed), Some(error)),
+        Err(error) => {
+            return with_snapshot(cached.as_ref().map(|cached| &cached.feed), Some(error));
+        }
     };
     let failure = write(&directory, &bytes).err().map(Error::CacheWrite);
     let feed = DatedFeed {
         as_of: utc_date(now),
         feed,
     };
-    loaded(Some(&feed), failure)
+    with_snapshot(Some(&feed), failure)
 }
 
-fn loaded(cache: Option<&DatedFeed>, failure: Option<Error>) -> Loaded {
+fn with_snapshot(cache: Option<&DatedFeed>, failure: Option<Error>) -> Loaded {
     Loaded {
         failure,
         holidays: merge(&snapshot(), cache),
@@ -108,11 +111,16 @@ fn fetch(url: &str, timeout: Duration) -> Result<Vec<u8>, Error> {
         .map_err(Error::Fetch)
 }
 
-/// Replaces the cached feed through a temporary file named for this process, so a reader never
-/// sees half of it.
+/// Replaces the cached feed through a uniquely named temporary file, so a reader never sees half
+/// of it.
 fn write(directory: &Path, bytes: &[u8]) -> io::Result<()> {
+    static WRITES: AtomicU64 = AtomicU64::new(0);
     fs::create_dir_all(directory)?;
-    let temporary = directory.join(format!(".{FEED_FILE}.{}", process::id()));
+    let temporary = directory.join(format!(
+        ".{FEED_FILE}.{}.{}",
+        process::id(),
+        WRITES.fetch_add(1, Ordering::Relaxed)
+    ));
     let written = fs::write(&temporary, bytes)
         .and_then(|()| fs::rename(&temporary, directory.join(FEED_FILE)));
     if written.is_err() {
@@ -161,7 +169,6 @@ mod tests {
         cache_directory(home.path()).join(FEED_FILE)
     }
 
-    /// Writes `bytes` as the cached feed, fetched at `fetched`.
     fn cache(home: &TempDir, bytes: &[u8], fetched: SystemTime) {
         let path = feed_path(home);
         fs::create_dir_all(cache_directory(home.path())).expect("the cache directory is creatable");
@@ -193,9 +200,9 @@ mod tests {
         format!("http://{address}/bank-holidays.json")
     }
 
-    fn ok(body: &[u8]) -> Vec<u8> {
+    fn http_response(status: &str, body: &[u8]) -> Vec<u8> {
         let mut response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
         )
         .into_bytes();
@@ -206,10 +213,6 @@ mod tests {
     /// A clock years ahead, so every cache it dates postdates the snapshot.
     fn later() -> SystemTime {
         SystemTime::now() + 1000 * DAY
-    }
-
-    fn load_later(home: &TempDir, fetch: impl FnOnce() -> Result<Vec<u8>, Error>) -> Loaded {
-        load_with(home.path(), later(), fetch)
     }
 
     fn name_in_2099(loaded: &Loaded) -> Option<&str> {
@@ -223,8 +226,8 @@ mod tests {
     fn a_missing_cache_is_filled_with_the_response_bytes_exactly() {
         let home = TempDir::new().expect("a temp dir is creatable");
         let body = feed("Fetched Day");
-        let url = serve(ok(&body));
-        let loaded = load_later(&home, || fetch(&url, TEST_TIMEOUT));
+        let url = serve(http_response("200 OK", &body));
+        let loaded = load_with(home.path(), later(), || fetch(&url, TEST_TIMEOUT));
         assert!(loaded.failure.is_none(), "{:?}", loaded.failure);
         assert_eq!(name_in_2099(&loaded), Some("Fetched Day"));
         assert_eq!(fs::read(feed_path(&home)).expect("the cache exists"), body);
@@ -233,8 +236,11 @@ mod tests {
     #[test]
     fn a_fresh_cache_is_used_without_a_request() {
         let home = TempDir::new().expect("a temp dir is creatable");
-        cache(&home, &feed("Cached Day"), later() - DAY + SECOND);
-        let loaded = load_later(&home, || panic!("a fresh cache makes no request"));
+        let now = later();
+        cache(&home, &feed("Cached Day"), now - DAY + SECOND);
+        let loaded = load_with(home.path(), now, || {
+            panic!("a fresh cache makes no request")
+        });
         assert!(loaded.failure.is_none(), "{:?}", loaded.failure);
         assert_eq!(name_in_2099(&loaded), Some("Cached Day"));
     }
@@ -243,7 +249,7 @@ mod tests {
     fn a_corrupt_cache_counts_as_absent() {
         let home = TempDir::new().expect("a temp dir is creatable");
         cache(&home, b"{\"england-and-wales\":", later());
-        let loaded = load_later(&home, || Ok(feed("Fetched Day")));
+        let loaded = load_with(home.path(), later(), || Ok(feed("Fetched Day")));
         assert!(loaded.failure.is_none(), "{:?}", loaded.failure);
         assert_eq!(name_in_2099(&loaded), Some("Fetched Day"));
     }
@@ -255,7 +261,7 @@ mod tests {
         fs::create_dir_all(directory.parent().expect("the cache is in Caches"))
             .expect("Caches is creatable");
         fs::write(&directory, b"").expect("a file can block the cache directory");
-        let loaded = load_later(&home, || Ok(feed("Fetched Day")));
+        let loaded = load_with(home.path(), later(), || Ok(feed("Fetched Day")));
         assert!(matches!(loaded.failure, Some(Error::CacheWrite(_))));
         assert_eq!(name_in_2099(&loaded), Some("Fetched Day"));
     }
@@ -270,7 +276,7 @@ mod tests {
         cache(&home, &cached, later() - 2 * DAY);
         let path = feed_path(&home);
         let before = modified(&path);
-        let loaded = load_later(&home, fetch);
+        let loaded = load_with(home.path(), later(), fetch);
         assert!(
             loaded.failure.as_ref().is_some_and(expected),
             "{:?}",
@@ -296,10 +302,7 @@ mod tests {
 
     #[test]
     fn an_http_error_keeps_the_cache() {
-        let url = serve(
-            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                .to_vec(),
-        );
+        let url = serve(http_response("503 Service Unavailable", b""));
         assert_failed_fetch_keeps_the_cache(
             || fetch(&url, TEST_TIMEOUT),
             |error| matches!(error, Error::Fetch(ureq::Error::StatusCode(503))),
