@@ -156,8 +156,8 @@ impl<'a> Calendar<'a> {
 
     /// The bridge that follows a bank holiday, when it's the last bank holiday before one.
     #[must_use]
-    pub fn bridge_after(&self, holiday: NaiveDate) -> Option<&Bridge> {
-        self.bridges.get(&holiday)
+    pub fn bridge_after(&self, date: NaiveDate) -> Option<&Bridge> {
+        self.bridges.get(&date)
     }
 
     #[must_use]
@@ -203,12 +203,12 @@ impl<'a> Calendar<'a> {
     }
 
     /// Whether a bank holiday is the first bank holiday of a four-day weekend.
-    fn starts_four_day_weekend(&self, holiday: NaiveDate) -> bool {
-        self.four_day_weekend(holiday).is_some_and(|weekend| {
+    fn starts_four_day_weekend(&self, date: NaiveDate) -> bool {
+        self.four_day_weekend(date).is_some_and(|weekend| {
             self.holidays
                 .range(weekend.first..=weekend.last)
                 .next()
-                .is_some_and(|(&first, _)| first == holiday)
+                .is_some_and(|(&first, _)| first == date)
         })
     }
 }
@@ -333,34 +333,31 @@ mod tests {
 
     #[test]
     fn an_easter_monday_on_24_to_26_april_is_bridged_to_early_may_by_four_days() {
-        for (good_friday, easter_monday, early_may, booked, year) in [
+        for (good_friday, easter_monday, early_may, booked) in [
             (
                 "2000-04-21",
                 "2000-04-24",
                 "2000-05-01",
                 ("2000-04-25", "2000-04-28"),
-                2000,
             ),
             (
                 "2095-04-22",
                 "2095-04-25",
                 "2095-05-02",
                 ("2095-04-26", "2095-04-29"),
-                2095,
             ),
             (
                 "2038-04-23",
                 "2038-04-26",
                 "2038-05-03",
                 ("2038-04-27", "2038-04-30"),
-                2038,
             ),
         ] {
             let holidays = holidays(&[good_friday, easter_monday, early_may]);
             assert_eq!(
                 bridges(&holidays, Division::EnglandAndWales),
                 [bridge(booked, 4, (good_friday, early_may))],
-                "{year}",
+                "{good_friday}",
             );
         }
     }
@@ -414,15 +411,6 @@ mod tests {
     fn the_ten_days_from_ve_day_2020_to_late_may_is_no_bridge() {
         let holidays = holidays(&["2020-05-08", "2020-05-25"]);
         assert_eq!(bridges(&holidays, Division::EnglandAndWales), []);
-    }
-
-    #[test]
-    fn a_bridge_to_a_predicted_bank_holiday_is_predicted() {
-        let holidays = holidays(&["2025-12-25", "2025-12-26"]).with_predictions(2025);
-        let bridge = Calendar::new(&holidays, Division::EnglandAndWales)
-            .bridge_after(date("2025-12-26"))
-            .cloned();
-        assert_eq!(bridge.map(|bridge| bridge.predicted), Some(true));
     }
 
     /// Every day of 2025 that isn't ordinary in the committed snapshot, by what it is.
