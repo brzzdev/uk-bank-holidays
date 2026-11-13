@@ -18,7 +18,6 @@ pub(crate) enum Move {
     Years(i32),
 }
 
-/// The selected day.
 #[derive(Clone, Copy)]
 pub(crate) struct Selection {
     pub(crate) date: NaiveDate,
@@ -98,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn arrows_move_a_day_or_a_week() {
+    fn day_and_week_moves_cross_month_and_year_ends() {
         assert_eq!(
             walk(
                 &holidays(),
@@ -184,10 +183,14 @@ mod tests {
     }
 
     #[test]
-    fn the_next_bank_holiday_from_late_december_is_new_years_day_even_when_predicted() {
+    fn the_next_bank_holiday_after_a_years_last_is_new_years_day_even_when_predicted() {
         let holidays = holidays();
         let last = *holidays.years(Division::EnglandAndWales).end();
-        let from = NaiveDate::from_ymd_opt(last - 1, 12, 26).expect("26 Dec exists");
+        let from = holidays
+            .year(Division::EnglandAndWales, last - 1)
+            .and_then(<[_]>::last)
+            .expect("every available year has bank holidays")
+            .date;
         assert_eq!(
             walk(&holidays, from, &[Move::NextBankHoliday]),
             [NaiveDate::from_ymd_opt(last, 1, 1).expect("1 Jan exists")],

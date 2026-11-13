@@ -74,15 +74,18 @@ impl BankHolidays {
         Self::redraw_on_a_new_day(cx);
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        let app = Self {
+        // The list can only scroll once its first frame has measured it.
+        cx.on_next_frame(window, |this, _, cx| {
+            this.scroll_to_selected_row();
+            cx.notify();
+        });
+        Self {
             division: Division::EnglandAndWales,
             focus,
             holiday_list: ScrollHandle::new(),
             holidays: merge(&snapshot(), None).with_predictions(today.year()),
             selection: Selection::new(today),
-        };
-        app.scroll_to_selected_row();
-        app
+        }
     }
 
     fn redraw_on_a_new_day(cx: &mut Context<Self>) {
@@ -113,16 +116,7 @@ impl BankHolidays {
         cx.notify();
     }
 
-    fn can_show(&self, division: Division) -> bool {
-        self.holidays
-            .years(division)
-            .contains(&self.selection.date.year())
-    }
-
     fn show(&mut self, division: Division, cx: &mut Context<Self>) {
-        if !self.can_show(division) {
-            return;
-        }
         self.division = division;
         self.scroll_to_selected_row();
         cx.notify();
@@ -165,7 +159,7 @@ impl BankHolidays {
             .on_click(cx.listener(move |this, _, _, cx| this.go(step, cx)))
     }
 
-    /// Handles each command only while it can act, so macOS greys the rest and doesn't beep.
+    /// Registers each command only while it can act, so its availability says whether it can.
     fn on_commands(
         &self,
         root: Div,
@@ -189,10 +183,17 @@ impl BankHolidays {
                 self.on_move::<PreviousWeek>(root, Move::By(TimeDelta::weeks(-1)), calendar, cx)
             })
             .map(|root| self.on_move::<PreviousYear>(root, Move::Years(-1), calendar, cx))
-            .map(|root| self.on_show::<ShowEnglandAndWales>(root, Division::EnglandAndWales, cx))
-            .map(|root| self.on_show::<ShowNorthernIreland>(root, Division::NorthernIreland, cx))
-            .map(|root| self.on_show::<ShowScotland>(root, Division::Scotland, cx))
-            .map(|root| self.on_move::<Today>(root, Move::To(today), calendar, cx))
+            .map(|root| Self::on_show::<ShowEnglandAndWales>(root, Division::EnglandAndWales, cx))
+            .map(|root| Self::on_show::<ShowNorthernIreland>(root, Division::NorthernIreland, cx))
+            .map(|root| Self::on_show::<ShowScotland>(root, Division::Scotland, cx))
+            .when(
+                self.selection.moved(Move::To(today), calendar).is_some(),
+                |root| {
+                    root.on_action(cx.listener(|this, _: &Today, _, cx| {
+                        this.go(Move::To(crate::today()), cx);
+                    }))
+                },
+            )
     }
 
     fn on_move<A: Action>(
@@ -208,10 +209,7 @@ impl BankHolidays {
         root.on_action(cx.listener(move |this, _: &A, _, cx| this.go(step, cx)))
     }
 
-    fn on_show<A: Action>(&self, root: Div, division: Division, cx: &mut Context<Self>) -> Div {
-        if !self.can_show(division) {
-            return root;
-        }
+    fn on_show<A: Action>(root: Div, division: Division, cx: &mut Context<Self>) -> Div {
         root.on_action(cx.listener(move |this, _: &A, _, cx| this.show(division, cx)))
     }
 
