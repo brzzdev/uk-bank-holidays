@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 
 use crate::selection::Move;
-use crate::{BankHolidays, FULL_DATE};
+use crate::{BankHolidays, FULL_DATE, SHORT_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
@@ -126,15 +126,11 @@ fn stale_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
     if today - as_of <= STALE_AFTER {
         return None;
     }
-    let format = if as_of.year() == today.year() {
-        "%-d %b"
-    } else {
-        "%-d %b %Y"
-    };
-    Some(format!(
-        "Couldn't reach gov.uk since {}",
-        as_of.format(format)
-    ))
+    let mut since = as_of.format(SHORT_DATE).to_string();
+    if as_of.year() != today.year() {
+        since = format!("{since} {}", as_of.year());
+    }
+    Some(format!("Couldn't reach gov.uk since {since}"))
 }
 
 fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
@@ -240,7 +236,7 @@ fn row(holiday: &BankHoliday, look: &RowLook, cx: &App) -> Div {
                 .w(px(DATE_COLUMN_WIDTH))
                 .flex_none()
                 .text_color(theme.muted_foreground)
-                .child(holiday.date.format("%-d %b").to_string()),
+                .child(holiday.date.format(SHORT_DATE).to_string()),
         )
         .child(div().flex_1().min_w_0().child(holiday.name.clone()))
         .child(dot_mark(look.dot, colour, theme))

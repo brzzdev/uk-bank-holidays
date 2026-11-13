@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::{env, process};
 
-use bank_holidays::{Calendar, Division, Holidays};
+use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
 use chrono::{Datelike, Local, NaiveDate, TimeDelta};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
@@ -25,7 +25,6 @@ use gpui_kit::{
 };
 
 use crate::menus::{Close, Hide, HideOthers, Minimise, Quit, menus, on_app_commands};
-use crate::refresh::read_cache;
 use crate::selection::{Move, Selection};
 
 actions!(
@@ -58,6 +57,8 @@ const DIVISIONS: [(Division, &str); 3] = [
 ];
 /// "Thursday 25 December 2025"
 const FULL_DATE: &str = "%A %-d %B %Y";
+/// "25 Dec"
+const SHORT_DATE: &str = "%-d %b";
 const WINDOW_HEIGHT: f32 = 600.;
 const WINDOW_WIDTH: f32 = 880.;
 
@@ -97,19 +98,16 @@ impl BankHolidays {
             this.scroll_to_selected_row();
             cx.notify();
         });
-        let cached = read_cache(home.as_deref());
         let mut this = Self {
             division: Division::EnglandAndWales,
             fetching: false,
             focus,
             holiday_list: ScrollHandle::new(),
-            holidays: cached.holidays.with_predictions(today.year()),
+            holidays: merge(&snapshot(), None).with_predictions(today.year()),
             home,
             selection: Selection::new(today),
         };
-        if cached.stale {
-            this.fetch(cx);
-        }
+        this.refresh(cx);
         this
     }
 

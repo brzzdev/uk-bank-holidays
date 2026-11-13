@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::path::PathBuf;
 use std::thread;
 use std::time::SystemTime;
 
-use bank_holidays::{Cached, Calendar, Holidays, load, load_cached, merge, snapshot};
+use bank_holidays::{Calendar, Holidays, load, load_cached};
 use chrono::Datelike as _;
-use futures_channel::oneshot;
 use gpui_kit::Context;
+use gpui_kit::base::async_util::unbounded;
 
 use crate::{BankHolidays, clock_today};
 
@@ -16,25 +16,25 @@ impl BankHolidays {
         if self.fetching {
             return;
         }
-        let cached = read_cache(self.home.as_deref());
+        let Some(home) = self.home.clone() else {
+            return;
+        };
+        let cached = load_cached(&home, SystemTime::now());
         self.replace_holidays(cached.holidays, cx);
         if cached.stale {
-            self.fetch(cx);
+            self.fetch(home, cx);
         }
     }
 
     /// A failed fetch leaves the data as it was and says nothing.
-    pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
-        let Some(home) = self.home.clone() else {
-            return;
-        };
+    fn fetch(&mut self, home: PathBuf, cx: &mut Context<Self>) {
         self.fetching = true;
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = unbounded();
         thread::spawn(move || {
-            let _ = sender.send(load(&home, SystemTime::now()));
+            let _ = sender.send_blocking(load(&home, SystemTime::now()));
         });
         cx.spawn(async move |this, cx| {
-            let loaded = receiver.await;
+            let loaded = receiver.recv().await;
             let _ = this.update(cx, |this, cx| {
                 this.fetching = false;
                 if let Ok(loaded) = loaded {
@@ -52,16 +52,5 @@ impl BankHolidays {
             .selection
             .kept_in(&Calendar::new(&self.holidays, self.division));
         cx.notify();
-    }
-}
-
-/// The snapshot alone when there's no home directory to hold a cache.
-pub(crate) fn read_cache(home: Option<&Path>) -> Cached {
-    match home {
-        Some(home) => load_cached(home, SystemTime::now()),
-        None => Cached {
-            holidays: merge(&snapshot(), None),
-            stale: false,
-        },
     }
 }
