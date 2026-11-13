@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::ops::Bound::{Excluded, Unbounded};
+use std::ops::RangeInclusive;
 
 use chrono::{Datelike, NaiveDate, Weekday};
 
@@ -112,12 +114,14 @@ pub struct Calendar<'a> {
     division: Division,
     four_day_weekends: Vec<Span>,
     holidays: BTreeMap<NaiveDate, &'a BankHoliday>,
+    years: RangeInclusive<i32>,
 }
 
 impl<'a> Calendar<'a> {
     #[must_use]
     pub fn new(holidays: &'a Holidays, division: Division) -> Self {
-        let following_year = predict(holidays.years(division).end() + 1, division);
+        let years = holidays.years(division);
+        let following_year = predict(years.end() + 1, division);
         let holidays: BTreeMap<_, _> = holidays
             .years_of(division)
             .values()
@@ -175,6 +179,7 @@ impl<'a> Calendar<'a> {
             division,
             four_day_weekends,
             holidays,
+            years,
         }
     }
 
@@ -242,6 +247,14 @@ impl<'a> Calendar<'a> {
     }
 
     #[must_use]
+    pub fn holiday_after(&self, date: NaiveDate) -> Option<&'a BankHoliday> {
+        self.holidays
+            .range((Excluded(date), Unbounded))
+            .next()
+            .map(|(_, &holiday)| holiday)
+    }
+
+    #[must_use]
     pub fn holiday_before(&self, date: NaiveDate) -> Option<&'a BankHoliday> {
         self.holidays
             .range(..date)
@@ -257,6 +270,12 @@ impl<'a> Calendar<'a> {
             holiday,
             starts_four_day_weekend: self.starts_four_day_weekend(date),
         })
+    }
+
+    /// The first and last years the division has bank holidays for.
+    #[must_use]
+    pub fn years(&self) -> RangeInclusive<i32> {
+        self.years.clone()
     }
 
     /// Whether a bank holiday is the first bank holiday of a four-day weekend.

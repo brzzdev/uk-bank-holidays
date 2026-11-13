@@ -78,7 +78,7 @@ impl BankHolidays {
                             selected: date == self.selection.date,
                             today: date == today,
                         };
-                        let selectable = self.moved(Move::To(date), calendar).is_some();
+                        let selectable = self.selection.moved(Move::To(date), calendar).is_some();
                         cell(week * WEEKDAYS.len() + weekday, date, &look, cx)
                             .when(selectable, |cell| {
                                 cell.on_click(Self::select_on_click(date, cx))

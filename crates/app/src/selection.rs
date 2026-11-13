@@ -1,16 +1,14 @@
-use std::ops::RangeInclusive;
-
 use bank_holidays::Calendar;
-use chrono::{Datelike as _, Days, Months, NaiveDate, TimeDelta};
+use chrono::{Datelike as _, Months, NaiveDate, TimeDelta};
 
 use crate::first_of_month;
 
 const MONTHS_IN_YEAR: i32 = 12;
 
 /// A change to the selected day.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum Move {
-    Days(i64),
+    By(TimeDelta),
     /// Keeps the day of the month a run of month moves began on, clamped to shorter months.
     Months(i32),
     NextBankHoliday,
@@ -21,7 +19,7 @@ pub(crate) enum Move {
 }
 
 /// The selected day.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy)]
 pub(crate) struct Selection {
     pub(crate) date: NaiveDate,
     /// The day of the month a run of month moves began on.
@@ -36,30 +34,26 @@ impl Selection {
         }
     }
 
-    /// Where a move lands, while it stays in the available years.
-    pub(crate) fn moved(
-        self,
-        step: Move,
-        calendar: &Calendar,
-        years: &RangeInclusive<i32>,
-    ) -> Option<Self> {
-        let mut month_day = None;
-        let date = match step {
-            Move::Days(days) => self.date.checked_add_signed(TimeDelta::try_days(days)?)?,
+    /// Where a move lands, while it stays in the calendar's years.
+    pub(crate) fn moved(self, step: Move, calendar: &Calendar) -> Option<Self> {
+        let (date, month_day) = match step {
+            Move::By(delta) => (self.date.checked_add_signed(delta)?, None),
             Move::Months(months) => {
-                let day = *month_day.insert(self.month_day.unwrap_or(self.date.day()));
+                let day = self.month_day.unwrap_or(self.date.day());
                 let first = add_months(first_of_month(self.date), months)?;
-                let last = add_months(first, 1)?.pred_opt()?;
-                first
-                    .checked_add_days(Days::new(u64::from(day - 1)))?
-                    .min(last)
+                let date = first.with_day(day.min(first.num_days_in_month().into()))?;
+                (date, Some(day))
             }
-            Move::NextBankHoliday => calendar.next(self.date.succ_opt()?)?.holiday.date,
-            Move::PreviousBankHoliday => calendar.holiday_before(self.date)?.date,
-            Move::To(date) => date,
-            Move::Years(years) => add_months(self.date, years.checked_mul(MONTHS_IN_YEAR)?)?,
+            Move::NextBankHoliday => (calendar.holiday_after(self.date)?.date, None),
+            Move::PreviousBankHoliday => (calendar.holiday_before(self.date)?.date, None),
+            Move::To(date) => (date, None),
+            Move::Years(years) => {
+                let date = add_months(self.date, years.checked_mul(MONTHS_IN_YEAR)?)?;
+                (date, None)
+            }
         };
-        years
+        calendar
+            .years()
             .contains(&date.year())
             .then_some(Self { date, month_day })
     }
@@ -92,14 +86,12 @@ mod tests {
 
     /// The dates a run of moves lands on from `from`, stopping at the first that can't be made.
     fn walk(holidays: &Holidays, from: NaiveDate, steps: &[Move]) -> Vec<NaiveDate> {
-        let division = Division::EnglandAndWales;
-        let calendar = Calendar::new(holidays, division);
-        let years = holidays.years(division);
+        let calendar = Calendar::new(holidays, Division::EnglandAndWales);
         let mut selection = Selection::new(from);
         steps
             .iter()
             .map_while(|&step| {
-                selection = selection.moved(step, &calendar, &years)?;
+                selection = selection.moved(step, &calendar)?;
                 Some(selection.date)
             })
             .collect()
@@ -111,7 +103,12 @@ mod tests {
             walk(
                 &holidays(),
                 date("2025-12-31"),
-                &[Move::Days(1), Move::Days(-7), Move::Days(7), Move::Days(-1)],
+                &[
+                    Move::By(TimeDelta::days(1)),
+                    Move::By(TimeDelta::weeks(-1)),
+                    Move::By(TimeDelta::weeks(1)),
+                    Move::By(TimeDelta::days(-1)),
+                ],
             ),
             [
                 date("2026-01-01"),
@@ -204,8 +201,7 @@ mod tests {
         let first = NaiveDate::from_ymd_opt(*years.start(), 1, 1).expect("1 Jan exists");
         let last = NaiveDate::from_ymd_opt(*years.end(), 12, 31).expect("31 Dec exists");
         for step in [
-            Move::Days(-1),
-            Move::Days(-7),
+            Move::By(TimeDelta::days(-1)),
             Move::Months(-1),
             Move::PreviousBankHoliday,
             Move::To(first - Days::new(1)),
@@ -214,8 +210,7 @@ mod tests {
             assert_eq!(walk(&holidays, first, &[step]), [], "{step:?}");
         }
         for step in [
-            Move::Days(1),
-            Move::Days(7),
+            Move::By(TimeDelta::days(1)),
             Move::Months(1),
             Move::NextBankHoliday,
             Move::To(last + Days::new(1)),

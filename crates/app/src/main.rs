@@ -7,7 +7,7 @@ use std::process;
 use std::time::Duration;
 
 use bank_holidays::{Calendar, Division, Holidays, merge, snapshot};
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, TimeDelta};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::{
@@ -43,7 +43,6 @@ actions!(
     ]
 );
 
-const DAYS_IN_WEEK: i64 = 7;
 /// How often the clock is read for a new day.
 const DATE_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 /// The division tabs in order, with their labels.
@@ -91,10 +90,11 @@ impl BankHolidays {
             let mut shown = today();
             loop {
                 cx.background_executor().timer(DATE_CHECK_INTERVAL).await;
-                if today() == shown {
+                let now = today();
+                if now == shown {
                     continue;
                 }
-                shown = today();
+                shown = now;
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
                     return;
                 }
@@ -103,14 +103,9 @@ impl BankHolidays {
         .detach();
     }
 
-    fn moved(&self, step: Move, calendar: &Calendar) -> Option<Selection> {
-        self.selection
-            .moved(step, calendar, &self.holidays.years(self.division))
-    }
-
     fn go(&mut self, step: Move, cx: &mut Context<Self>) {
         let calendar = Calendar::new(&self.holidays, self.division);
-        let Some(selection) = self.moved(step, &calendar) else {
+        let Some(selection) = self.selection.moved(step, &calendar) else {
             return;
         };
         self.selection = selection;
@@ -166,7 +161,7 @@ impl BankHolidays {
             .small()
             .tab_stop(false)
             .icon(icon)
-            .disabled(self.moved(step, calendar).is_none())
+            .disabled(self.selection.moved(step, calendar).is_none())
             .on_click(cx.listener(move |this, _, _, cx| this.go(step, cx)))
     }
 
@@ -179,25 +174,25 @@ impl BankHolidays {
         cx: &mut Context<Self>,
     ) -> Div {
         root.map(|root| self.on_move::<NextBankHoliday>(root, Move::NextBankHoliday, calendar, cx))
-            .map(|root| self.on_move::<NextDay>(root, Move::Days(1), calendar, cx))
+            .map(|root| self.on_move::<NextDay>(root, Move::By(TimeDelta::days(1)), calendar, cx))
             .map(|root| self.on_move::<NextMonth>(root, Move::Months(1), calendar, cx))
-            .map(|root| self.on_move::<NextWeek>(root, Move::Days(DAYS_IN_WEEK), calendar, cx))
+            .map(|root| self.on_move::<NextWeek>(root, Move::By(TimeDelta::weeks(1)), calendar, cx))
             .map(|root| self.on_move::<NextYear>(root, Move::Years(1), calendar, cx))
             .map(|root| {
                 self.on_move::<PreviousBankHoliday>(root, Move::PreviousBankHoliday, calendar, cx)
             })
-            .map(|root| self.on_move::<PreviousDay>(root, Move::Days(-1), calendar, cx))
+            .map(|root| {
+                self.on_move::<PreviousDay>(root, Move::By(TimeDelta::days(-1)), calendar, cx)
+            })
             .map(|root| self.on_move::<PreviousMonth>(root, Move::Months(-1), calendar, cx))
-            .map(|root| self.on_move::<PreviousWeek>(root, Move::Days(-DAYS_IN_WEEK), calendar, cx))
+            .map(|root| {
+                self.on_move::<PreviousWeek>(root, Move::By(TimeDelta::weeks(-1)), calendar, cx)
+            })
             .map(|root| self.on_move::<PreviousYear>(root, Move::Years(-1), calendar, cx))
             .map(|root| self.on_show::<ShowEnglandAndWales>(root, Division::EnglandAndWales, cx))
             .map(|root| self.on_show::<ShowNorthernIreland>(root, Division::NorthernIreland, cx))
             .map(|root| self.on_show::<ShowScotland>(root, Division::Scotland, cx))
-            .when(self.moved(Move::To(today), calendar).is_some(), |root| {
-                root.on_action(cx.listener(|this, _: &Today, _, cx| {
-                    this.go(Move::To(crate::today()), cx);
-                }))
-            })
+            .map(|root| self.on_move::<Today>(root, Move::To(today), calendar, cx))
     }
 
     fn on_move<A: Action>(
@@ -207,7 +202,7 @@ impl BankHolidays {
         calendar: &Calendar,
         cx: &mut Context<Self>,
     ) -> Div {
-        if self.moved(step, calendar).is_none() {
+        if self.selection.moved(step, calendar).is_none() {
             return root;
         }
         root.on_action(cx.listener(move |this, _: &A, _, cx| this.go(step, cx)))
@@ -284,7 +279,6 @@ fn main() {
         });
 }
 
-/// One shortcut per command.
 fn key_bindings() -> [KeyBinding; 14] {
     [
         KeyBinding::new("alt-left", PreviousBankHoliday, None),
