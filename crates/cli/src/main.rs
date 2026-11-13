@@ -259,10 +259,6 @@ fn span_text(span: Span) -> String {
     }
 }
 
-fn span_json(span: Span, days: usize) -> serde_json::Value {
-    serde_json::json!({"days": days, "first": span.first, "last": span.last})
-}
-
 fn to_json(holiday: &BankHoliday, division: Division, calendar: &Calendar) -> serde_json::Value {
     let mut json = serde_json::json!({
         "date": holiday.date,
@@ -273,8 +269,16 @@ fn to_json(holiday: &BankHoliday, division: Division, calendar: &Calendar) -> se
     });
     if let Some(bridge) = calendar.bridge_after(holiday.date) {
         json["bridge"] = serde_json::json!({
-            "booked": span_json(bridge.booked, bridge.days_booked),
-            "off": span_json(bridge.off, bridge.off.day_count()),
+            "booked": {
+                "first": bridge.booked.first,
+                "last": bridge.booked.last,
+                "working_days": bridge.days_booked,
+            },
+            "off": {
+                "days": bridge.off.day_count(),
+                "first": bridge.off.first,
+                "last": bridge.off.last,
+            },
             "predicted": bridge.predicted,
         });
     }
@@ -370,6 +374,16 @@ mod tests {
     fn list_defaults_to_the_current_year() {
         let outcome = run_on("2026-06-01", &["list"]);
         assert!(outcome.stdout.starts_with("Thu  1 Jan  New Year’s Day\n"));
+        assert!(outcome.stdout.ends_with(
+            "Mon 28 Dec  Boxing Day · four-day weekend · \
+             Book 3 days (29–31 Dec), get 10 off (25 Dec – 3 Jan) (predicted)\n"
+        ));
+    }
+
+    #[test]
+    fn list_json_marks_a_bridge_to_a_predicted_bank_holiday_predicted() {
+        let outcome = run_on("2025-01-01", &["list", "2026", "--json"]);
+        assert_eq!(parsed(&outcome)[2]["bridge"]["predicted"], true);
     }
 
     #[test]
@@ -391,7 +405,7 @@ mod tests {
             parsed(&outcome)[3],
             serde_json::json!({
                 "bridge": {
-                    "booked": {"days": 3, "first": "2025-12-29", "last": "2025-12-31"},
+                    "booked": {"first": "2025-12-29", "last": "2025-12-31", "working_days": 3},
                     "off": {"days": 8, "first": "2025-12-25", "last": "2026-01-01"},
                     "predicted": false,
                 },

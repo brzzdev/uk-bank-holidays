@@ -129,7 +129,7 @@ impl<'a> Calendar<'a> {
 
     /// The bridge that books a day.
     #[must_use]
-    pub fn bridge(&self, date: NaiveDate) -> Option<&Bridge> {
+    fn bridge(&self, date: NaiveDate) -> Option<&Bridge> {
         if is_weekend(date) {
             return None;
         }
@@ -142,7 +142,7 @@ impl<'a> Calendar<'a> {
         self.bridges.get(&holiday)
     }
 
-    pub fn bridges(&self) -> impl Iterator<Item = &Bridge> {
+    fn bridges(&self) -> impl Iterator<Item = &Bridge> {
         self.bridges.values()
     }
 
@@ -171,11 +171,6 @@ impl<'a> Calendar<'a> {
             .iter()
             .copied()
             .find(|weekend| weekend.contains(date))
-    }
-
-    #[must_use]
-    pub fn four_day_weekends(&self) -> &[Span] {
-        &self.four_day_weekends
     }
 
     #[must_use]
@@ -318,16 +313,37 @@ mod tests {
     }
 
     #[test]
-    fn easter_monday_on_26_april_is_bridged_to_early_may_by_four_days() {
-        let holidays = holidays(&["2038-04-23", "2038-04-26", "2038-05-03"]);
-        assert_eq!(
-            bridges(&holidays, Division::EnglandAndWales),
-            [bridge(
+    fn an_easter_monday_on_24_to_26_april_is_bridged_to_early_may_by_four_days() {
+        for (good_friday, easter_monday, early_may, booked, year) in [
+            (
+                "2000-04-21",
+                "2000-04-24",
+                "2000-05-01",
+                ("2000-04-25", "2000-04-28"),
+                2000,
+            ),
+            (
+                "2011-04-22",
+                "2011-04-25",
+                "2011-05-02",
+                ("2011-04-26", "2011-04-29"),
+                2011,
+            ),
+            (
+                "2038-04-23",
+                "2038-04-26",
+                "2038-05-03",
                 ("2038-04-27", "2038-04-30"),
-                4,
-                ("2038-04-23", "2038-05-03")
-            )],
-        );
+                2038,
+            ),
+        ] {
+            let holidays = holidays(&[good_friday, easter_monday, early_may]);
+            assert_eq!(
+                bridges(&holidays, Division::EnglandAndWales),
+                [bridge(booked, 4, (good_friday, early_may))],
+                "{year}",
+            );
+        }
     }
 
     #[test]
