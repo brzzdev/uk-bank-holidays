@@ -10,14 +10,14 @@ use gpui_kit::{
 use crate::detail::detail;
 use crate::{BankHolidays, first_of_month};
 
-/// The red behind a four-day weekend's days, as an opacity of `red`.
-const FOUR_DAY_WEEKEND_TINT: f32 = 0.12;
-/// The amber behind a bridge's days, as an opacity of `warning`.
-const BRIDGE_TINT: f32 = 0.12;
 /// The bridge's hatch lines, as an opacity of `warning`.
 const BRIDGE_HATCH: f32 = 0.35;
 const BRIDGE_HATCH_INTERVAL: f32 = 4.;
 const BRIDGE_HATCH_WIDTH: f32 = 1.5;
+/// The amber behind a bridge's days, as an opacity of `warning`.
+const BRIDGE_TINT: f32 = 0.12;
+/// The red behind a four-day weekend's days, as an opacity of `red`.
+const FOUR_DAY_WEEKEND_TINT: f32 = 0.12;
 /// A dimmed overflow day's bank holiday disc, as an opacity of `red`.
 const OVERFLOW_FILL: f32 = 0.8;
 
@@ -340,6 +340,8 @@ mod tests {
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
 
+    /// The four-day weekend tint and the bridge hatching are shading the legend names, so they're
+    /// checked as backgrounds for the marks on them, not against a plain cell.
     #[test]
     fn every_mark_meets_wcag_contrast_in_light_and_dark() {
         let looks = [false, true].into_iter().flat_map(|selected| {

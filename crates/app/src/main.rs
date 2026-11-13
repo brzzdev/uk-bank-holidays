@@ -74,8 +74,7 @@ impl BankHolidays {
         })
     }
 
-    /// A ‹ or › button that moves the shown month, greyed when the move leaves the available year
-    /// range.
+    /// Moves the shown month, greyed when the move leaves the available year range.
     fn step_button(
         &self,
         id: &'static str,
