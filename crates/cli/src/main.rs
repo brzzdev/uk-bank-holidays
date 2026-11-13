@@ -82,7 +82,7 @@ fn main() -> ExitCode {
     let outcome = run(
         std::env::args_os().skip(1),
         today,
-        &merge(&snapshot(), None, today.year()),
+        &merge(&snapshot(), None).with_predictions(today.year()),
     );
     let mut code = outcome.code;
     let mut stderr = outcome.stderr;
@@ -256,7 +256,7 @@ mod tests {
         });
         let feed = Feed::parse(json.to_string().as_bytes()).expect("the fixture is a valid feed");
         let as_of = "2025-01-01".parse().expect("the fixture date is valid");
-        merge(&DatedFeed { as_of, feed }, None, current_year)
+        merge(&DatedFeed { as_of, feed }, None).with_predictions(current_year)
     }
 
     fn run_on(today: &str, args: &[&str]) -> Outcome {
