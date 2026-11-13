@@ -82,7 +82,7 @@ fn main() -> ExitCode {
     let outcome = run(
         std::env::args_os().skip(1),
         today,
-        &merge(&snapshot(), None),
+        &merge(&snapshot(), None).with_predictions(today.year()),
     );
     let mut code = outcome.code;
     let mut stderr = outcome.stderr;
@@ -132,9 +132,10 @@ fn run(
                     .fold(String::new(), |mut text, holiday| {
                         let _ = writeln!(
                             text,
-                            "{}  {}",
+                            "{}  {}{}",
                             holiday.date.format("%a %e %b"),
-                            holiday.name
+                            holiday.name,
+                            predicted_marker(holiday)
                         );
                         text
                     }),
@@ -156,8 +157,9 @@ fn run(
                         days => format!("in {days} days"),
                     };
                     format!(
-                        "{}, {}, {countdown}\n",
+                        "{}{}, {}, {countdown}\n",
                         next.holiday.name,
+                        predicted_marker(next.holiday),
                         next.holiday.date.format("%A %-d %B %Y"),
                     )
                 }
@@ -201,11 +203,20 @@ fn parse(args: impl IntoIterator<Item: Into<OsString>>) -> Result<Options, lexop
     })
 }
 
+fn predicted_marker(holiday: &BankHoliday) -> &'static str {
+    if holiday.predicted {
+        " (predicted)"
+    } else {
+        ""
+    }
+}
+
 fn to_json(holiday: &BankHoliday, division: Division) -> serde_json::Value {
     serde_json::json!({
         "date": holiday.date,
         "division": division.key(),
         "name": holiday.name,
+        "predicted": holiday.predicted,
     })
 }
 
@@ -221,8 +232,9 @@ mod tests {
 
     use bank_holidays::{DatedFeed, Feed};
 
-    /// Bank holidays for 2025 and 2026, with Northern Ireland's own two in 2025.
-    fn fixture() -> Holidays {
+    /// Bank holidays published for 2025 and 2026, with Northern Ireland's own two in 2025, and
+    /// predicted ones from 2027.
+    fn fixture(current_year: i32) -> Holidays {
         fn event(date: &str, title: &str) -> serde_json::Value {
             serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})
         }
@@ -245,12 +257,12 @@ mod tests {
         });
         let feed = Feed::parse(json.to_string().as_bytes()).expect("the fixture is a valid feed");
         let as_of = "2025-01-01".parse().expect("the fixture date is valid");
-        merge(&DatedFeed { as_of, feed }, None)
+        merge(&DatedFeed { as_of, feed }, None).with_predictions(current_year)
     }
 
     fn run_on(today: &str, args: &[&str]) -> Outcome {
         let today = today.parse::<NaiveDate>().expect("test dates are valid");
-        run(args.iter().copied(), today, &fixture())
+        run(args.iter().copied(), today, &fixture(today.year()))
     }
 
     fn parsed(outcome: &Outcome) -> serde_json::Value {
@@ -309,6 +321,7 @@ mod tests {
                 "date": "2025-03-17",
                 "division": "northern-ireland",
                 "name": "St Patrick’s Day",
+                "predicted": false,
             }),
         );
     }
@@ -322,6 +335,7 @@ mod tests {
                 "date": "2025-12-25",
                 "division": "england-and-wales",
                 "name": "Christmas Day",
+                "predicted": false,
             }),
         );
     }
@@ -338,8 +352,56 @@ mod tests {
             (
                 2,
                 "",
-                "bank-holidays: no bank holidays for 1999 (have 2025–2026)\n"
+                "bank-holidays: no bank holidays for 1999 (have 2025–2028)\n"
             ),
+        );
+    }
+
+    #[test]
+    fn list_marks_each_predicted_bank_holiday() {
+        let outcome = run_on("2025-01-01", &["list", "2027"]);
+        assert_eq!(outcome.code, 0);
+        assert_eq!(
+            outcome.stdout,
+            "Fri  1 Jan  New Year’s Day (predicted)\n\
+             Fri 26 Mar  Good Friday (predicted)\n\
+             Mon 29 Mar  Easter Monday (predicted)\n\
+             Mon  3 May  Early May bank holiday (predicted)\n\
+             Mon 31 May  Spring bank holiday (predicted)\n\
+             Mon 30 Aug  Summer bank holiday (predicted)\n\
+             Mon 27 Dec  Christmas Day (substitute day) (predicted)\n\
+             Tue 28 Dec  Boxing Day (substitute day) (predicted)\n",
+        );
+    }
+
+    #[test]
+    fn list_json_says_whether_each_bank_holiday_is_predicted() {
+        let predicted = |year| {
+            parsed(&run_on("2025-01-01", &["list", year, "--json"]))
+                .as_array()
+                .expect("list prints an array")
+                .iter()
+                .map(|holiday| holiday["predicted"].clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(predicted("2026"), [false; 3]);
+        assert_eq!(predicted("2027"), [true; 8]);
+    }
+
+    #[test]
+    fn next_can_land_on_a_predicted_bank_holiday() {
+        assert_eq!(
+            run_on("2026-12-29", &[]).stdout,
+            "New Year’s Day (predicted), Friday 1 January 2027, in 3 days\n",
+        );
+    }
+
+    #[test]
+    fn the_year_range_runs_two_years_past_the_current_year_when_it_is_past_the_data() {
+        let outcome = run_on("2028-06-01", &["list", "2031"]);
+        assert_eq!(
+            outcome.stderr,
+            "bank-holidays: no bank holidays for 2031 (have 2025–2030)\n"
         );
     }
 
@@ -378,8 +440,9 @@ mod tests {
     }
 
     #[test]
-    fn a_day_after_the_last_bank_holiday_in_the_data_is_a_runtime_failure() {
-        let outcome = run_on("2026-12-29", &[]);
+    fn a_day_after_the_last_predicted_bank_holiday_is_a_runtime_failure() {
+        let today = "2028-12-29".parse().expect("test dates are valid");
+        let outcome = run(std::iter::empty::<&str>(), today, &fixture(2025));
         assert_eq!(outcome.code, RUNTIME_FAILURE);
         assert!(outcome.stderr.starts_with("bank-holidays: "));
     }

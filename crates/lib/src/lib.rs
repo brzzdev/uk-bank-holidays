@@ -2,6 +2,7 @@ mod division;
 mod error;
 mod feed;
 mod holidays;
+mod predict;
 mod snapshot;
 
 pub use division::Division;
