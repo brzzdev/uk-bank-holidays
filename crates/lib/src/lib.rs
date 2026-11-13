@@ -1,3 +1,4 @@
+mod cache;
 mod division;
 mod error;
 mod feed;
@@ -5,6 +6,7 @@ mod holidays;
 mod predict;
 mod snapshot;
 
+pub use cache::{BUNDLE_ID, Loaded, load};
 pub use division::Division;
 pub use error::Error;
 pub use feed::{DatedFeed, Event, Feed};
