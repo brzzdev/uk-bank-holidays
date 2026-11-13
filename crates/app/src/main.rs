@@ -1,5 +1,6 @@
 mod detail;
 mod grid;
+mod menus;
 mod selection;
 mod sidebar;
 
@@ -21,6 +22,7 @@ use gpui_kit::{
     init, open_window, px, size,
 };
 
+use crate::menus::{Close, Hide, HideOthers, Minimise, Quit, menus, on_app_commands};
 use crate::selection::{Move, Selection};
 
 actions!(
@@ -258,6 +260,8 @@ fn main() {
         .run(|cx| {
             init(cx);
             cx.bind_keys(key_bindings());
+            on_app_commands(cx);
+            cx.set_menus(menus());
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -276,18 +280,23 @@ fn main() {
         });
 }
 
-fn key_bindings() -> [KeyBinding; 14] {
+fn key_bindings() -> [KeyBinding; 19] {
     [
+        KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("alt-left", PreviousBankHoliday, None),
         KeyBinding::new("alt-right", NextBankHoliday, None),
         KeyBinding::new("cmd-1", ShowEnglandAndWales, None),
         KeyBinding::new("cmd-2", ShowScotland, None),
         KeyBinding::new("cmd-3", ShowNorthernIreland, None),
+        KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("cmd-left", PreviousMonth, None),
+        KeyBinding::new("cmd-m", Minimise, None),
+        KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-right", NextMonth, None),
         KeyBinding::new("cmd-shift-left", PreviousYear, None),
         KeyBinding::new("cmd-shift-right", NextYear, None),
         KeyBinding::new("cmd-t", Today, None),
+        KeyBinding::new("cmd-w", Close, None),
         KeyBinding::new("down", NextWeek, None),
         KeyBinding::new("left", PreviousDay, None),
         KeyBinding::new("right", NextDay, None),
