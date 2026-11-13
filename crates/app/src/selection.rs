@@ -56,7 +56,7 @@ impl Selection {
             .then_some(Self { date, month_day })
     }
 
-    /// Moves a selection outside the calendar's years to the same date in the nearest year it has.
+    /// Moves a selection outside the calendar's years into the nearest year it has, as a year move.
     pub(crate) fn kept_in(self, calendar: &Calendar) -> Self {
         let years = calendar.years();
         let year = self.date.year();

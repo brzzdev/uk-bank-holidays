@@ -13,6 +13,8 @@ use crate::{BankHolidays, FULL_DATE, SHORT_DATE};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
+/// "25 Dec 2025"
+const SHORT_DATE_WITH_YEAR: &str = "%-d %b %Y";
 const SIDEBAR_WIDTH: f32 = 270.;
 /// The age past which the data counts as gov.uk being unreachable.
 const UNREACHABLE_AFTER: TimeDelta = TimeDelta::days(30);
@@ -126,11 +128,15 @@ fn unreachable_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
     if today - as_of <= UNREACHABLE_AFTER {
         return None;
     }
-    let mut since = as_of.format(SHORT_DATE).to_string();
-    if as_of.year() != today.year() {
-        since = format!("{since} {}", as_of.year());
-    }
-    Some(format!("Couldn't reach gov.uk since {since}"))
+    let format = if as_of.year() == today.year() {
+        SHORT_DATE
+    } else {
+        SHORT_DATE_WITH_YEAR
+    };
+    Some(format!(
+        "Couldn't reach gov.uk since {}",
+        as_of.format(format)
+    ))
 }
 
 fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
@@ -276,8 +282,8 @@ mod tests {
         let division = Division::EnglandAndWales;
         let calendar = Calendar::new(&holidays, division);
         let year = |year| holidays.year(division, year).unwrap_or_default();
-        let dot_on = |date: &str| {
-            let date: NaiveDate = date.parse().expect("test dates are valid");
+        let dot_on = |day: &str| {
+            let date = date(day);
             let holiday = year(date.year())
                 .iter()
                 .find(|holiday| holiday.date == date)

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::thread;
 use std::time::SystemTime;
 
@@ -9,27 +10,24 @@ use gpui_kit::base::async_util::unbounded;
 use crate::{BankHolidays, clock_today};
 
 impl BankHolidays {
-    /// Does nothing while a fetch is running, since its result redraws anyway.
+    /// Does nothing while a fetch is running: its result supersedes a cache read.
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.fetching {
             return;
         }
-        let Some(home) = &self.home else {
+        let Some(home) = self.home.clone() else {
             return;
         };
-        let cached = load_cached(home, SystemTime::now());
+        let cached = load_cached(&home, SystemTime::now());
         if replaces(&cached.holidays, &self.holidays) {
             self.replace_holidays(cached.holidays, cx);
         }
         if cached.stale {
-            self.fetch(cx);
+            self.fetch(home, cx);
         }
     }
 
-    fn fetch(&mut self, cx: &mut Context<Self>) {
-        let Some(home) = self.home.clone() else {
-            return;
-        };
+    fn fetch(&mut self, home: PathBuf, cx: &mut Context<Self>) {
         self.fetching = true;
         let (sender, receiver) = unbounded();
         thread::spawn(move || {
@@ -68,8 +66,7 @@ fn replaces(cached: &Holidays, shown: &Holidays) -> bool {
     cached.as_of() >= shown.as_of()
 }
 
-/// A failed fetch leaves the data shown as it was; one whose cache write alone failed still
-/// brings current data.
+/// Whether a load brought current data: it did unless the fetch itself failed.
 fn installs(loaded: &Loaded) -> bool {
     matches!(loaded.failure, None | Some(Error::CacheWrite(_)))
 }
