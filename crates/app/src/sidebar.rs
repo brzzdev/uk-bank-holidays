@@ -14,8 +14,8 @@ use crate::{BankHolidays, FULL_DATE, SHORT_DATE};
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
 const SIDEBAR_WIDTH: f32 = 270.;
-/// How old the data gets before the sidebar says gov.uk couldn't be reached.
-const STALE_AFTER: TimeDelta = TimeDelta::days(30);
+/// The age past which the data counts as gov.uk being unreachable.
+const UNREACHABLE_AFTER: TimeDelta = TimeDelta::days(30);
 const YEAR_WIDTH: f32 = 40.;
 
 /// The one mark a row of the list carries.
@@ -80,7 +80,7 @@ impl BankHolidays {
                     )
                     .vertical_scrollbar(&self.holiday_list),
             )
-            .children(stale_note(self.holidays.as_of(), today).map(|note| {
+            .children(unreachable_note(self.holidays.as_of(), today).map(|note| {
                 div()
                     .p_3()
                     .border_t_1()
@@ -122,8 +122,8 @@ impl BankHolidays {
     }
 }
 
-fn stale_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
-    if today - as_of <= STALE_AFTER {
+fn unreachable_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
+    if today - as_of <= UNREACHABLE_AFTER {
         return None;
     }
     let mut since = as_of.format(SHORT_DATE).to_string();
@@ -253,19 +253,19 @@ mod tests {
     }
 
     #[test]
-    fn the_stale_note_shows_once_the_data_is_more_than_30_days_old() {
+    fn the_unreachable_note_shows_once_the_data_is_more_than_30_days_old() {
         let as_of = date("2026-10-01");
-        assert_eq!(stale_note(as_of, date("2026-10-31")), None);
+        assert_eq!(unreachable_note(as_of, date("2026-10-31")), None);
         assert_eq!(
-            stale_note(as_of, date("2026-11-01")).as_deref(),
+            unreachable_note(as_of, date("2026-11-01")).as_deref(),
             Some("Couldn't reach gov.uk since 1 Oct"),
         );
     }
 
     #[test]
-    fn the_stale_note_names_the_year_once_it_differs_from_this_one() {
+    fn the_unreachable_note_names_the_year_once_it_differs_from_this_one() {
         assert_eq!(
-            stale_note(date("2025-10-01"), date("2026-01-15")).as_deref(),
+            unreachable_note(date("2025-10-01"), date("2026-01-15")).as_deref(),
             Some("Couldn't reach gov.uk since 1 Oct 2025"),
         );
     }

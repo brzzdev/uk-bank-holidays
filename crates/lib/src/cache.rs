@@ -367,6 +367,40 @@ mod tests {
     }
 
     #[test]
+    fn a_missing_cache_reads_as_the_snapshot_and_stale() {
+        let home = TempDir::new().expect("a temp dir is creatable");
+        let cached = load_cached(home.path(), later());
+        assert!(cached.stale);
+        assert_eq!(cached.holidays.as_of(), snapshot().as_of);
+    }
+
+    #[test]
+    fn a_fresh_cache_reads_as_of_its_modification_date_and_not_stale() {
+        let home = TempDir::new().expect("a temp dir is creatable");
+        let now = later();
+        let fetched = now - DAY + SECOND;
+        cache(&home, &feed("Cached Day"), fetched);
+        let cached = load_cached(home.path(), now);
+        assert!(!cached.stale);
+        assert_eq!(cached.holidays.as_of(), utc_date(fetched));
+        assert_eq!(
+            cached
+                .holidays
+                .year(Division::EnglandAndWales, 2099)
+                .map(|holidays| holidays[0].name.as_str()),
+            Some("Cached Day"),
+        );
+    }
+
+    #[test]
+    fn a_day_old_cache_reads_as_stale() {
+        let home = TempDir::new().expect("a temp dir is creatable");
+        let now = later();
+        cache(&home, &feed("Cached Day"), now - DAY);
+        assert!(load_cached(home.path(), now).stale);
+    }
+
+    #[test]
     fn a_cache_from_the_future_is_stale() {
         let now = SystemTime::UNIX_EPOCH + 1000 * DAY;
         assert!(!is_fresh(now + SECOND, now));

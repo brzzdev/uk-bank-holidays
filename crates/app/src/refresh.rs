@@ -11,7 +11,8 @@ use crate::{BankHolidays, clock_today};
 
 impl BankHolidays {
     /// Redraws from the cache, then fetches on a thread when the cache is stale. Does nothing while
-    /// a fetch is running, since its result redraws anyway.
+    /// a fetch is running, since its result redraws anyway. A cache older than the data shown, as
+    /// when a fetch succeeded but couldn't be written, doesn't replace it.
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.fetching {
             return;
@@ -20,7 +21,9 @@ impl BankHolidays {
             return;
         };
         let cached = load_cached(&home, SystemTime::now());
-        self.replace_holidays(cached.holidays, cx);
+        if cached.holidays.as_of() >= self.holidays.as_of() {
+            self.replace_holidays(cached.holidays, cx);
+        }
         if cached.stale {
             self.fetch(home, cx);
         }
@@ -45,7 +48,7 @@ impl BankHolidays {
         .detach();
     }
 
-    /// Keeps the division and selected day, moving the selection to the nearest year left.
+    /// Keeps the division and selected day, moving the selection to the nearest year the data covers.
     fn replace_holidays(&mut self, holidays: Holidays, cx: &mut Context<Self>) {
         self.holidays = holidays.with_predictions(clock_today().year());
         self.selection = self
