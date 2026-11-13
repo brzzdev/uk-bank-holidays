@@ -129,7 +129,7 @@ fn write(directory: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
-/// The UTC date of a time, matching the snapshot's capture date.
+/// Dates are UTC, as the snapshot's capture date is.
 fn utc_date(time: SystemTime) -> NaiveDate {
     DateTime::<Utc>::from(time).date_naive()
 }
@@ -227,7 +227,7 @@ mod tests {
         let home = TempDir::new().expect("a temp dir is creatable");
         let body = feed("Fetched Day");
         let url = serve(http_response("200 OK", &body));
-        let loaded = load_with(home.path(), later(), || fetch(&url, TEST_TIMEOUT));
+        let loaded = load_with(home.path(), later(), || fetch(&url, FETCH_TIMEOUT));
         assert!(loaded.failure.is_none(), "{:?}", loaded.failure);
         assert_eq!(name_in_2099(&loaded), Some("Fetched Day"));
         assert_eq!(fs::read(feed_path(&home)).expect("the cache exists"), body);
