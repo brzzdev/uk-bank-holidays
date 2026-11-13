@@ -192,6 +192,14 @@ impl<'a> Calendar<'a> {
             .find(|weekend| weekend.contains(date))
     }
 
+    /// Whether a day is in either stretch of days off a bridge joins.
+    #[must_use]
+    pub fn joins_bridge(&self, date: NaiveDate) -> bool {
+        self.bridges
+            .values()
+            .any(|bridge| bridge.off.contains(date) && !bridge.booked.contains(date))
+    }
+
     #[must_use]
     pub fn next(&self, from: NaiveDate) -> Option<Next<'a>> {
         let (&date, &holiday) = self.holidays.range(from..).next()?;
@@ -316,6 +324,16 @@ mod tests {
             .bridges
             .into_values()
             .collect()
+    }
+
+    #[test]
+    fn days_off_on_both_sides_of_a_bridge_join_it_but_its_booked_days_dont() {
+        let holidays = holidays(&["2025-05-05", "2025-12-25", "2025-12-26", "2026-01-01"]);
+        let calendar = Calendar::new(&holidays, Division::EnglandAndWales);
+        assert!(calendar.joins_bridge(date("2025-12-25")));
+        assert!(calendar.joins_bridge(date("2026-01-01")));
+        assert!(!calendar.joins_bridge(date("2025-12-30")));
+        assert!(!calendar.joins_bridge(date("2025-05-05")));
     }
 
     #[test]

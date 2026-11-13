@@ -12,4 +12,6 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+bank-holidays.workspace = true
+chrono.workspace = true
 gpui-kit = "=0.9.1"

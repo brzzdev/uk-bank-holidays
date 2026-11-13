@@ -548,6 +548,8 @@ dependencies = [
 name = "bank-holidays-app"
 version = "0.1.0"
 dependencies = [
+ "bank-holidays",
+ "chrono",
  "gpui-kit",
 ]
 
