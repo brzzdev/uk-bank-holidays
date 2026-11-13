@@ -24,6 +24,25 @@ pub struct Loaded {
     pub holidays: Holidays,
 }
 
+/// The snapshot merged with the feed cached under `home`, read without a request.
+#[derive(Debug)]
+pub struct Cached {
+    pub holidays: Holidays,
+    /// Whether the cache is missing or old enough that [`load`] would fetch.
+    pub stale: bool,
+}
+
+#[must_use]
+pub fn load_cached(home: &Path, now: SystemTime) -> Cached {
+    let cached = read(&cache_directory(home).join(FEED_FILE));
+    Cached {
+        stale: !cached
+            .as_ref()
+            .is_some_and(|cached| is_fresh(cached.fetched, now)),
+        holidays: merge(&snapshot(), cached.as_ref().map(|cached| &cached.feed)),
+    }
+}
+
 /// Merges the snapshot with the feed cached under `home`, first refreshing the cache from gov.uk
 /// when it is stale.
 #[must_use]
@@ -70,12 +89,12 @@ fn cache_directory(home: &Path) -> PathBuf {
 }
 
 /// The cached feed, and its modification time, which is when it was fetched.
-struct Cached {
+struct CachedFeed {
     feed: DatedFeed,
     fetched: SystemTime,
 }
 
-fn read(path: &Path) -> Option<Cached> {
+fn read(path: &Path) -> Option<CachedFeed> {
     let mut file = File::open(path).ok()?;
     let fetched = file
         .metadata()
@@ -84,7 +103,7 @@ fn read(path: &Path) -> Option<Cached> {
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).ok()?;
     let feed = Feed::parse(&bytes).ok()?;
-    Some(Cached {
+    Some(CachedFeed {
         feed: DatedFeed {
             as_of: utc_date(fetched),
             feed,

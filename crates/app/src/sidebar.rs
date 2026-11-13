@@ -1,5 +1,5 @@
 use bank_holidays::{BankHoliday, Calendar, Next};
-use chrono::{Datelike as _, NaiveDate};
+use chrono::{Datelike as _, NaiveDate, TimeDelta};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme, IconName, StyledExt as _, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -14,6 +14,8 @@ use crate::{BankHolidays, FULL_DATE};
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
 const SIDEBAR_WIDTH: f32 = 270.;
+/// How old the data gets before the sidebar says gov.uk couldn't be reached.
+const STALE_AFTER: TimeDelta = TimeDelta::days(30);
 const YEAR_WIDTH: f32 = 40.;
 
 /// The one mark a row of the list carries.
@@ -78,6 +80,15 @@ impl BankHolidays {
                     )
                     .vertical_scrollbar(&self.holiday_list),
             )
+            .children(stale_note(self.holidays.as_of(), today).map(|note| {
+                div()
+                    .p_3()
+                    .border_t_1()
+                    .border_color(cx.theme().sidebar_border)
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(note)
+            }))
     }
 
     fn year_stepper(&self, calendar: &Calendar, cx: &mut Context<Self>) -> impl IntoElement {
@@ -109,6 +120,21 @@ impl BankHolidays {
                 cx,
             ))
     }
+}
+
+fn stale_note(as_of: NaiveDate, today: NaiveDate) -> Option<String> {
+    if today - as_of <= STALE_AFTER {
+        return None;
+    }
+    let format = if as_of.year() == today.year() {
+        "%-d %b"
+    } else {
+        "%-d %b %Y"
+    };
+    Some(format!(
+        "Couldn't reach gov.uk since {}",
+        as_of.format(format)
+    ))
 }
 
 fn dot(calendar: &Calendar, holiday: &BankHoliday) -> Option<Dot> {
@@ -225,6 +251,28 @@ mod tests {
     use super::*;
 
     use bank_holidays::{Division, merge, snapshot};
+
+    fn date(s: &str) -> NaiveDate {
+        s.parse().expect("test dates are valid")
+    }
+
+    #[test]
+    fn the_stale_note_shows_once_the_data_is_more_than_30_days_old() {
+        let as_of = date("2026-10-01");
+        assert_eq!(stale_note(as_of, date("2026-10-31")), None);
+        assert_eq!(
+            stale_note(as_of, date("2026-11-01")).as_deref(),
+            Some("Couldn't reach gov.uk since 1 Oct"),
+        );
+    }
+
+    #[test]
+    fn the_stale_note_names_the_year_once_it_differs_from_this_one() {
+        assert_eq!(
+            stale_note(date("2025-10-01"), date("2026-01-15")).as_deref(),
+            Some("Couldn't reach gov.uk since 1 Oct 2025"),
+        );
+    }
 
     #[test]
     fn a_row_is_dotted_for_a_prediction_before_a_four_day_weekend_before_a_bridge() {

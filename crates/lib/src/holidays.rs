@@ -55,6 +55,7 @@ fn substitute_name(title: &str) -> String {
 /// Each division's bank holidays, by year.
 #[derive(Debug)]
 pub struct Holidays {
+    as_of: NaiveDate,
     divisions: HashMap<Division, BTreeMap<i32, Vec<BankHoliday>>>,
 }
 
@@ -76,7 +77,10 @@ pub fn merge(snapshot: &DatedFeed, cache: Option<&DatedFeed>) -> Holidays {
             (division, years)
         })
         .collect();
-    Holidays { divisions }
+    Holidays {
+        as_of: cache.map_or(snapshot.as_of, |cache| cache.as_of),
+        divisions,
+    }
 }
 
 fn last_published_year(years: &BTreeMap<i32, Vec<BankHoliday>>) -> Option<i32> {
@@ -120,6 +124,13 @@ impl Holidays {
             }
         }
         self
+    }
+
+    /// When the data was last current: the cache's fetch date, or the snapshot's capture date where
+    /// the cache is older or absent.
+    #[must_use]
+    pub fn as_of(&self) -> NaiveDate {
+        self.as_of
     }
 
     #[must_use]
@@ -236,6 +247,20 @@ mod tests {
             names(&holidays, 2026),
             [(date("2026-12-25"), "Christmas Day")]
         );
+    }
+
+    #[test]
+    fn the_data_is_as_of_the_newer_of_the_cache_and_the_snapshot() {
+        let snapshot = dated_feed("2025-06-01", &[("2026-12-25", "Christmas Day")]);
+        let as_of = |cache: Option<&str>| {
+            let cache = cache.map(|as_of| dated_feed(as_of, &[("2026-12-28", "Boxing Day")]));
+            merge(&snapshot, cache.as_ref())
+                .with_predictions(2025)
+                .as_of()
+        };
+        assert_eq!(as_of(None), date("2025-06-01"));
+        assert_eq!(as_of(Some("2025-05-31")), date("2025-06-01"));
+        assert_eq!(as_of(Some("2025-07-01")), date("2025-07-01"));
     }
 
     #[test]

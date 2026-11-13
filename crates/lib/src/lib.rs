@@ -7,7 +7,7 @@ mod holidays;
 mod predict;
 mod snapshot;
 
-pub use cache::{BUNDLE_ID, Loaded, load};
+pub use cache::{BUNDLE_ID, Cached, Loaded, load, load_cached};
 pub use calendar::{Bridge, Calendar, Day, Next, Span};
 pub use division::Division;
 pub use error::Error;
