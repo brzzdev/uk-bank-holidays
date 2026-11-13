@@ -1,8 +1,7 @@
-use std::path::PathBuf;
 use std::thread;
 use std::time::SystemTime;
 
-use bank_holidays::{Calendar, Holidays, load, load_cached};
+use bank_holidays::{Calendar, Error, Holidays, load, load_cached};
 use chrono::Datelike as _;
 use gpui_kit::Context;
 use gpui_kit::base::async_util::unbounded;
@@ -15,18 +14,24 @@ impl BankHolidays {
         if self.fetching {
             return;
         }
-        let Some(home) = self.home.clone() else {
+        let Some(home) = &self.home else {
             return;
         };
-        let cached = load_cached(&home, SystemTime::now());
-        self.replace_holidays(cached.holidays, cx);
+        let cached = load_cached(home, SystemTime::now());
+        if replaces(&cached.holidays, &self.holidays) {
+            self.replace_holidays(cached.holidays, cx);
+        }
         if cached.stale {
-            self.fetch(home, cx);
+            self.fetch(cx);
         }
     }
 
-    /// A failed fetch says nothing.
-    fn fetch(&mut self, home: PathBuf, cx: &mut Context<Self>) {
+    /// A failed fetch leaves the data shown as it was. One whose cache write alone failed still
+    /// brings current data.
+    pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
+        let Some(home) = self.home.clone() else {
+            return;
+        };
         self.fetching = true;
         let (sender, receiver) = unbounded();
         thread::spawn(move || {
@@ -36,7 +41,9 @@ impl BankHolidays {
             let loaded = receiver.recv().await;
             let _ = this.update(cx, |this, cx| {
                 this.fetching = false;
-                if let Ok(loaded) = loaded {
+                if let Ok(loaded) = loaded
+                    && matches!(loaded.failure, None | Some(Error::CacheWrite(_)))
+                {
                     this.replace_holidays(loaded.holidays, cx);
                 }
             });
@@ -44,23 +51,24 @@ impl BankHolidays {
         .detach();
     }
 
-    /// Keeps the division and selected day.
+    /// Moves the selection into the new data's years if it fell outside them.
     fn replace_holidays(&mut self, holidays: Holidays, cx: &mut Context<Self>) {
-        if !supersedes(&holidays, &self.holidays) {
-            return;
-        }
         self.holidays = holidays.with_predictions(clock_today().year());
-        self.selection = self
+        let selection = self
             .selection
             .kept_in(&Calendar::new(&self.holidays, self.division));
-        self.scroll_to_selected_row();
+        if selection.date != self.selection.date {
+            self.selection = selection;
+            self.scroll_to_selected_row();
+        }
         cx.notify();
     }
 }
 
-/// Older data, such as the cache left behind when a fetch couldn't be written, never replaces newer.
-fn supersedes(incoming: &Holidays, shown: &Holidays) -> bool {
-    incoming.as_of() >= shown.as_of()
+/// An unchanged cache would only redraw, and an older one is what a fetch that couldn't be
+/// written leaves behind.
+fn replaces(cached: &Holidays, shown: &Holidays) -> bool {
+    cached.as_of() > shown.as_of()
 }
 
 #[cfg(test)]
@@ -71,15 +79,15 @@ mod tests {
     use chrono::Days;
 
     #[test]
-    fn data_as_of_an_older_date_never_replaces_newer_data() {
-        let snapshot_only = merge(&snapshot(), None);
-        let fetched = DatedFeed {
+    fn only_a_cache_newer_than_the_data_shown_replaces_it() {
+        let older = merge(&snapshot(), None);
+        let newer_feed = DatedFeed {
             as_of: snapshot().as_of + Days::new(10),
             feed: snapshot().feed,
         };
-        let fetched = merge(&snapshot(), Some(&fetched));
-        assert!(!supersedes(&snapshot_only, &fetched));
-        assert!(supersedes(&fetched, &snapshot_only));
-        assert!(supersedes(&fetched, &fetched));
+        let newer = merge(&snapshot(), Some(&newer_feed));
+        assert!(replaces(&newer, &older));
+        assert!(!replaces(&older, &newer));
+        assert!(!replaces(&newer, &newer));
     }
 }

@@ -28,7 +28,7 @@ pub struct Loaded {
 #[derive(Debug)]
 pub struct Cached {
     pub holidays: Holidays,
-    /// Whether the cache is missing or old enough that [`load`] would fetch.
+    /// Whether the cache is missing, a day old, or dated in the future.
     pub stale: bool,
 }
 
