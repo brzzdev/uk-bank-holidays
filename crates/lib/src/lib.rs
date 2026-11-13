@@ -1,4 +1,5 @@
 mod cache;
+mod calendar;
 mod division;
 mod error;
 mod feed;
@@ -7,10 +8,11 @@ mod predict;
 mod snapshot;
 
 pub use cache::{BUNDLE_ID, Loaded, load};
+pub use calendar::{Bridge, Calendar, Day, Next, Span};
 pub use division::Division;
 pub use error::Error;
 pub use feed::{DatedFeed, Event, Feed};
-pub use holidays::{BankHoliday, Holidays, Next, merge};
+pub use holidays::{BankHoliday, Holidays, merge};
 pub use snapshot::snapshot;
 
 #[cfg(test)]

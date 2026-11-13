@@ -52,13 +52,6 @@ fn substitute_name(title: &str) -> String {
     format!("{title} (substitute day)")
 }
 
-/// The next bank holiday on or after a day, and how many days away it is.
-#[derive(Debug, Eq, PartialEq)]
-pub struct Next<'a> {
-    pub days: i64,
-    pub holiday: &'a BankHoliday,
-}
-
 /// Each division's bank holidays, by year.
 #[derive(Debug)]
 pub struct Holidays {
@@ -130,19 +123,6 @@ impl Holidays {
     }
 
     #[must_use]
-    pub fn next(&self, division: Division, from: NaiveDate) -> Option<Next<'_>> {
-        let holiday = self
-            .years_of(division)
-            .range(from.year()..)
-            .flat_map(|(_, holidays)| holidays)
-            .find(|holiday| holiday.date >= from)?;
-        Some(Next {
-            days: (holiday.date - from).num_days(),
-            holiday,
-        })
-    }
-
-    #[must_use]
     pub fn year(&self, division: Division, year: i32) -> Option<&[BankHoliday]> {
         self.years_of(division).get(&year).map(Vec::as_slice)
     }
@@ -161,7 +141,7 @@ impl Holidays {
         first..=last
     }
 
-    fn years_of(&self, division: Division) -> &BTreeMap<i32, Vec<BankHoliday>> {
+    pub(crate) fn years_of(&self, division: Division) -> &BTreeMap<i32, Vec<BankHoliday>> {
         &self.divisions[&division]
     }
 }
@@ -319,50 +299,5 @@ mod tests {
         );
         assert_eq!(first_of_2026(Division::Scotland), ("New Year’s Day", true));
         assert_eq!(holidays.years(Division::Scotland), 2025..=2028);
-    }
-
-    #[test]
-    fn the_next_bank_holiday_on_its_own_day_is_zero_days_away() {
-        let holidays = merge(
-            &dated_feed("2025-06-01", &[("2025-12-25", "Christmas Day")]),
-            None,
-        );
-        let next = holidays
-            .next(Division::EnglandAndWales, date("2025-12-25"))
-            .expect("Christmas is on or after itself");
-        assert_eq!(
-            (next.holiday.name.as_str(), next.days),
-            ("Christmas Day", 0)
-        );
-    }
-
-    #[test]
-    fn the_next_bank_holiday_after_the_last_of_a_year_is_in_the_next_year() {
-        let holidays = merge(
-            &dated_feed(
-                "2025-06-01",
-                &[
-                    ("2025-12-26", "Boxing Day"),
-                    ("2026-01-01", "New Year’s Day"),
-                ],
-            ),
-            None,
-        );
-        let next = holidays
-            .next(Division::EnglandAndWales, date("2025-12-27"))
-            .expect("New Year’s Day follows");
-        assert_eq!((next.holiday.date, next.days), (date("2026-01-01"), 5));
-    }
-
-    #[test]
-    fn there_is_no_next_bank_holiday_after_the_last_one_in_the_data() {
-        let holidays = merge(
-            &dated_feed("2025-06-01", &[("2025-12-25", "Christmas Day")]),
-            None,
-        );
-        assert_eq!(
-            holidays.next(Division::EnglandAndWales, date("2025-12-26")),
-            None
-        );
     }
 }
