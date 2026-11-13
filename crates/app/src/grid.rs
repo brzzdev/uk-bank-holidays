@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::detail::detail;
 use crate::selection::Move;
-use crate::{BankHolidays, Today, first_of_month};
+use crate::{BankHolidays, Today, divider, first_of_month};
 
 /// The bridge's hatch lines, as an opacity of `warning`.
 const BRIDGE_HATCH: f32 = 0.35;
@@ -159,7 +159,7 @@ impl BankHolidays {
                     .gap_1()
                     .pt_3()
                     .border_t_1()
-                    .border_color(theme.border)
+                    .border_color(divider(theme))
                     .text_sm()
                     .child(div().text_base().font_semibold().child(detail.title))
                     .child(div().text_color(theme.muted_foreground).child(detail.when))
@@ -347,6 +347,8 @@ mod tests {
 
     use gpui_kit::Rgba;
 
+    /// A divider separates areas without carrying meaning, so it needs less than WCAG's 3:1.
+    const DIVIDER_CONTRAST: f32 = 1.5;
     /// WCAG's minimum for graphics.
     const GRAPHIC_CONTRAST: f32 = 3.;
     /// WCAG's minimum for text.
@@ -408,6 +410,12 @@ mod tests {
             if ratio < GRAPHIC_CONTRAST {
                 failures.push(format!(
                     "{appearance}: outline on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
+                ));
+            }
+            let ratio = contrast(divider(&theme), theme.background);
+            if ratio < DIVIDER_CONTRAST {
+                failures.push(format!(
+                    "{appearance}: divider on the window is {ratio:.2}, under {DIVIDER_CONTRAST}"
                 ));
             }
             for (selected, area, disc, overflow) in looks.clone() {
