@@ -14,11 +14,12 @@ use chrono::{Datelike, Local, NaiveDate, TimeDelta};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::{
-    ActiveTheme, Disableable as _, IconName, Sizable as _, Theme, TitleBar, h_flex, v_flex,
+    ActiveTheme, Disableable as _, IconName, Sizable as _, Theme, ThemeColor, TitleBar, h_flex,
+    v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, App, AppContext, Bounds, ClickEvent, Context, Div, FocusHandle,
+    Action, App, AppContext, Bounds, ClickEvent, Context, Div, FocusHandle, Hsla,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement, QuitMode, Render,
     ScrollHandle, Styled, Window, WindowBounds, WindowOptions, actions, application, assets, div,
     init, open_window, px, size,
@@ -49,6 +50,8 @@ actions!(
 
 /// How often the clock is read for a new day.
 const DATE_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+/// The opacity of `foreground` laid over `border` for a divider.
+const DIVIDER_LIFT: f32 = 0.12;
 /// The division tabs in order, with their labels.
 const DIVISIONS: [(Division, &str); 3] = [
     (Division::EnglandAndWales, "England and Wales"),
@@ -241,17 +244,20 @@ impl BankHolidays {
             .iter()
             .position(|&(division, _)| division == self.division)
             .expect("every division has a tab");
-        TitleBar::new().child(div()).child(
-            TabBar::new("divisions")
-                .segmented()
-                .small()
-                .mr_2()
-                .selected_index(selected)
-                .on_click(cx.listener(|this, &index: &usize, _, cx| {
-                    this.show(DIVISIONS[index].0, cx);
-                }))
-                .children(DIVISIONS.map(|(_, label)| Tab::new().label(label))),
-        )
+        TitleBar::new()
+            .border_color(divider(cx.theme()))
+            .child(div())
+            .child(
+                TabBar::new("divisions")
+                    .segmented()
+                    .small()
+                    .mr_2()
+                    .selected_index(selected)
+                    .on_click(cx.listener(|this, &index: &usize, _, cx| {
+                        this.show(DIVISIONS[index].0, cx);
+                    }))
+                    .children(DIVISIONS.map(|(_, label)| Tab::new().label(label))),
+            )
     }
 }
 
@@ -334,4 +340,9 @@ fn clock_today() -> NaiveDate {
 
 fn first_of_month(date: NaiveDate) -> NaiveDate {
     date.with_day(1).expect("every month has a first day")
+}
+
+/// The rule between two panes: gpui-kit's `border` is too faint to see on the window.
+fn divider(theme: &ThemeColor) -> Hsla {
+    theme.border.blend(theme.foreground.opacity(DIVIDER_LIFT))
 }

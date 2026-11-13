@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::detail::detail;
 use crate::selection::Move;
-use crate::{BankHolidays, Today, first_of_month};
+use crate::{BankHolidays, Today, divider, first_of_month};
 
 /// The bridge's hatch lines, as an opacity of `warning`.
 const BRIDGE_HATCH: f32 = 0.35;
@@ -159,7 +159,7 @@ impl BankHolidays {
                     .gap_1()
                     .pt_3()
                     .border_t_1()
-                    .border_color(theme.border)
+                    .border_color(divider(theme))
                     .text_sm()
                     .child(div().text_base().font_semibold().child(detail.title))
                     .child(div().text_color(theme.muted_foreground).child(detail.when))
@@ -213,6 +213,11 @@ fn cell_background(theme: &ThemeColor, selected: bool, area: Option<Area>) -> Hs
 /// The edge of a shape too faint to tell from the window alone.
 fn outline(theme: &ThemeColor) -> Hsla {
     theme.muted_foreground
+}
+
+/// The edge of a four-day weekend's day, whose tint is too faint to tell from the window alone.
+fn four_day_weekend_edge(theme: &ThemeColor) -> Hsla {
+    theme.red
 }
 
 fn bridge_hatch(theme: &ThemeColor) -> Hsla {
@@ -281,8 +286,12 @@ fn cell(index: usize, date: NaiveDate, look: &Look, cx: &App) -> Stateful<Div> {
         .items_center()
         .justify_center()
         .rounded(px(CELL_RADIUS))
-        .when(look.area == Some(Area::Bridge), |shading| {
-            shading.bg(bridge_pattern(theme))
+        .map(|shading| match look.area {
+            Some(Area::Bridge) => shading.bg(bridge_pattern(theme)),
+            Some(Area::FourDayWeekend) => shading
+                .border_1()
+                .border_color(four_day_weekend_edge(theme)),
+            None => shading,
         })
         .child(ring);
     div()
@@ -311,10 +320,14 @@ fn legend(cx: &App) -> Div {
     let theme = cx.theme();
     let swatch = || div().flex_none().size(px(LEGEND_SWATCH_SIZE));
     let shading_swatch = |area| {
+        let edge = match area {
+            Area::Bridge => outline(theme),
+            Area::FourDayWeekend => four_day_weekend_edge(theme),
+        };
         swatch()
             .rounded_sm()
             .border_1()
-            .border_color(outline(theme))
+            .border_color(edge)
             .bg(area_tint(theme, area))
     };
     let entry = |swatch: Div, label: &'static str| h_flex().gap_1().child(swatch).child(label);
@@ -347,6 +360,8 @@ mod tests {
 
     use gpui_kit::Rgba;
 
+    /// A divider separates panes without carrying meaning, so it needs less than WCAG's 3:1.
+    const DIVIDER_CONTRAST: f32 = 1.5;
     /// WCAG's minimum for graphics.
     const GRAPHIC_CONTRAST: f32 = 3.;
     /// WCAG's minimum for text.
@@ -387,6 +402,41 @@ mod tests {
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
 
+    #[test]
+    fn every_edge_and_divider_stands_out_from_the_surface_behind_it_in_light_and_dark() {
+        let mut failures = Vec::new();
+        for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
+            let edges = [
+                ("four-day weekend edge", four_day_weekend_edge(&theme)),
+                ("outline", outline(&theme)),
+            ]
+            .map(|(mark, colour)| (mark, colour, "window", theme.background, GRAPHIC_CONTRAST));
+            let dividers = [
+                ("sidebar", theme.sidebar),
+                ("title bar", theme.title_bar),
+                ("window", theme.background),
+            ]
+            .map(|(surface, behind)| {
+                (
+                    "divider",
+                    divider(&theme),
+                    surface,
+                    behind,
+                    DIVIDER_CONTRAST,
+                )
+            });
+            for (mark, colour, surface, behind, minimum) in edges.into_iter().chain(dividers) {
+                let ratio = contrast(colour, behind);
+                if ratio < minimum {
+                    failures.push(format!(
+                        "{appearance}: {mark} on the {surface} is {ratio:.2}, under {minimum}"
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     /// The four-day weekend tint and the bridge hatching are shading the legend names, so they're
     /// checked as backgrounds for the marks on them, not against a plain cell.
     #[test]
@@ -404,12 +454,6 @@ mod tests {
         });
         let mut failures = Vec::new();
         for (appearance, theme) in [("light", ThemeColor::light()), ("dark", ThemeColor::dark())] {
-            let ratio = contrast(outline(&theme), theme.background);
-            if ratio < GRAPHIC_CONTRAST {
-                failures.push(format!(
-                    "{appearance}: outline on the window is {ratio:.2}, under {GRAPHIC_CONTRAST}"
-                ));
-            }
             for (selected, area, disc, overflow) in looks.clone() {
                 // A bridge books working days, so it never holds a bank holiday's disc.
                 if area == Some(Area::Bridge) && disc.is_some() {

@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 
 use crate::selection::Move;
-use crate::{BankHolidays, FULL_DATE, SHORT_DATE};
+use crate::{BankHolidays, FULL_DATE, SHORT_DATE, divider};
 
 const DATE_COLUMN_WIDTH: f32 = 52.;
 const DOT_SIZE: f32 = 7.;
@@ -53,7 +53,7 @@ impl BankHolidays {
             .h_full()
             .bg(cx.theme().sidebar)
             .border_r_1()
-            .border_color(cx.theme().sidebar_border)
+            .border_color(divider(cx.theme()))
             .children(calendar.next(today).map(|next| next_holiday(&next, cx)))
             .child(self.year_stepper(calendar, cx))
             .child(
@@ -86,7 +86,7 @@ impl BankHolidays {
                 div()
                     .p_3()
                     .border_t_1()
-                    .border_color(cx.theme().sidebar_border)
+                    .border_color(divider(cx.theme()))
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(note)
@@ -99,7 +99,7 @@ impl BankHolidays {
             .gap_1()
             .p_1p5()
             .border_b_1()
-            .border_color(cx.theme().sidebar_border)
+            .border_color(divider(cx.theme()))
             .child(self.step_button(
                 "previous-year",
                 IconName::ChevronLeft,
@@ -174,7 +174,7 @@ fn next_holiday(next: &Next, cx: &App) -> Div {
         .gap_2()
         .p_3()
         .border_b_1()
-        .border_color(theme.sidebar_border)
+        .border_color(divider(theme))
         .child(
             v_flex()
                 .flex_1()
