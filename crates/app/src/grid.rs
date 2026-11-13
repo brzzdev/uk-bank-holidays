@@ -110,7 +110,7 @@ impl BankHolidays {
             .small()
             .tab_stop(false)
             .label("Today")
-            .disabled(self.selection.moved(Move::To(today), calendar).is_none())
+            .disabled(!self.can_go_today(calendar, today))
             .on_click(|_, window, cx| window.dispatch_action(Box::new(Today), cx));
         let theme = cx.theme();
         v_flex()

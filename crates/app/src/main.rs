@@ -208,14 +208,15 @@ impl BankHolidays {
             .map(|root| Self::on_show::<ShowEnglandAndWales>(root, Division::EnglandAndWales, cx))
             .map(|root| Self::on_show::<ShowNorthernIreland>(root, Division::NorthernIreland, cx))
             .map(|root| Self::on_show::<ShowScotland>(root, Division::Scotland, cx))
-            .when(
-                self.selection.moved(Move::To(today), calendar).is_some(),
-                |root| {
-                    root.on_action(cx.listener(|this, _: &Today, _, cx| {
-                        this.go(Move::To(clock_today()), cx);
-                    }))
-                },
-            )
+            .when(self.can_go_today(calendar, today), |root| {
+                root.on_action(cx.listener(|this, _: &Today, _, cx| {
+                    this.go(Move::To(clock_today()), cx);
+                }))
+            })
+    }
+
+    fn can_go_today(&self, calendar: &Calendar, today: NaiveDate) -> bool {
+        self.selection.moved(Move::To(today), calendar).is_some()
     }
 
     fn on_move<A: Action>(
