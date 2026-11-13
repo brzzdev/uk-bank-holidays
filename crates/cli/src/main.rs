@@ -232,7 +232,8 @@ mod tests {
 
     use bank_holidays::{DatedFeed, Feed};
 
-    /// Bank holidays published for 2025 and 2026, with Northern Ireland's own two in 2025.
+    /// Bank holidays published for 2025 and 2026, with Northern Ireland's own two in 2025, and
+    /// predicted ones from 2027.
     fn fixture(current_year: i32) -> Holidays {
         fn event(date: &str, title: &str) -> serde_json::Value {
             serde_json::json!({"title": title, "date": date, "notes": "", "bunting": true})

@@ -30,9 +30,25 @@ impl BankHoliday {
             predicted: false,
         }
     }
+
+    pub(crate) fn predicted(date: NaiveDate, title: &str) -> Self {
+        Self {
+            date,
+            name: title.to_owned(),
+            predicted: true,
+        }
+    }
+
+    pub(crate) fn predicted_substitute(date: NaiveDate, title: &str) -> Self {
+        Self {
+            date,
+            name: substitute_name(title),
+            predicted: true,
+        }
+    }
 }
 
-pub(crate) fn substitute_name(title: &str) -> String {
+fn substitute_name(title: &str) -> String {
     format!("{title} (substitute day)")
 }
 
@@ -93,7 +109,7 @@ pub(crate) fn by_year(feed: &Feed, division: Division) -> BTreeMap<i32, Vec<Bank
 }
 
 impl Holidays {
-    /// Adds predicted bank holidays to each division from the year after its own last, through a
+    /// Adds predicted bank holidays to each division from the year after its own last published year, through a
     /// last year shared by all.
     #[must_use]
     pub fn with_predictions(mut self, current_year: i32) -> Self {

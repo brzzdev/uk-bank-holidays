@@ -1,6 +1,5 @@
 use chrono::{Datelike, Days, NaiveDate, Weekday};
 
-use crate::holidays::substitute_name;
 use crate::{BankHoliday, Division};
 
 const BATTLE_OF_THE_BOYNE: &str = "Battle of the Boyne (Orangemen’s Day)";
@@ -42,12 +41,15 @@ pub(crate) fn predict(year: i32, division: Division) -> Vec<BankHoliday> {
     if division == Division::NorthernIreland {
         holidays.push(single(date(year, 3, 17), ST_PATRICKS_DAY));
     }
-    holidays.push(on_its_day(easter - Days::new(2), GOOD_FRIDAY));
+    holidays.push(BankHoliday::predicted(easter - Days::new(2), GOOD_FRIDAY));
     if division != Division::Scotland {
-        holidays.push(on_its_day(easter + Days::new(1), EASTER_MONDAY));
+        holidays.push(BankHoliday::predicted(easter + Days::new(1), EASTER_MONDAY));
     }
-    holidays.push(on_its_day(first_monday(year, 5), EARLY_MAY));
-    holidays.push(on_its_day(monday_on_or_before(date(year, 5, 31)), SPRING));
+    holidays.push(BankHoliday::predicted(first_monday(year, 5), EARLY_MAY));
+    holidays.push(BankHoliday::predicted(
+        monday_on_or_before(date(year, 5, 31)),
+        SPRING,
+    ));
     if division == Division::NorthernIreland {
         holidays.push(single(date(year, 7, 12), BATTLE_OF_THE_BOYNE));
     }
@@ -56,7 +58,7 @@ pub(crate) fn predict(year: i32, division: Division) -> Vec<BankHoliday> {
     } else {
         monday_on_or_before(date(year, 8, 31))
     };
-    holidays.push(on_its_day(summer, SUMMER));
+    holidays.push(BankHoliday::predicted(summer, SUMMER));
     if division == Division::Scotland {
         holidays.push(single(date(year, 11, 30), ST_ANDREWS_DAY));
     }
@@ -101,9 +103,9 @@ fn single(day: NaiveDate, title: &str) -> BankHoliday {
     match day.weekday() {
         Weekday::Sat | Weekday::Sun => {
             let monday = day + Days::new(u64::from(Weekday::Mon.days_since(day.weekday())));
-            substitute(monday, title)
+            BankHoliday::predicted_substitute(monday, title)
         }
-        _ => on_its_day(day, title),
+        _ => BankHoliday::predicted(day, title),
     }
 }
 
@@ -116,38 +118,26 @@ fn pair(
     let day = |offset| first + Days::new(offset);
     match (first.weekday(), sunday) {
         (Weekday::Fri, _) => [
-            on_its_day(first, first_title),
-            substitute(day(3), second_title),
+            BankHoliday::predicted(first, first_title),
+            BankHoliday::predicted_substitute(day(3), second_title),
         ],
         (Weekday::Sat, _) => [
-            substitute(day(2), first_title),
-            substitute(day(3), second_title),
+            BankHoliday::predicted_substitute(day(2), first_title),
+            BankHoliday::predicted_substitute(day(3), second_title),
         ],
         (Weekday::Sun, SundayStart::InDateOrder) => [
-            substitute(day(1), first_title),
-            substitute(day(2), second_title),
+            BankHoliday::predicted_substitute(day(1), first_title),
+            BankHoliday::predicted_substitute(day(2), second_title),
         ],
         (Weekday::Sun, SundayStart::SecondKeepsItsDay) => [
-            on_its_day(day(1), second_title),
-            substitute(day(2), first_title),
+            BankHoliday::predicted(day(1), second_title),
+            BankHoliday::predicted_substitute(day(2), first_title),
         ],
         _ => [
-            on_its_day(first, first_title),
-            on_its_day(day(1), second_title),
+            BankHoliday::predicted(first, first_title),
+            BankHoliday::predicted(day(1), second_title),
         ],
     }
-}
-
-fn on_its_day(date: NaiveDate, title: &str) -> BankHoliday {
-    BankHoliday {
-        date,
-        name: title.to_owned(),
-        predicted: true,
-    }
-}
-
-fn substitute(date: NaiveDate, title: &str) -> BankHoliday {
-    on_its_day(date, &substitute_name(title))
 }
 
 fn first_monday(year: i32, month: u32) -> NaiveDate {
